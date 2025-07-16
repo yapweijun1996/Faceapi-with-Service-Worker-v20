@@ -263,12 +263,9 @@ export function hideModal() {
  * Clears all canvas overlays.
  */
 export function clearAllCanvases() {
-    [config.canvas.id, config.canvas.overlay, config.canvas.box, config.video.output].forEach(id => {
-        const c = document.getElementById(id);
-        if (c) {
-            const ctx = c.getContext('2d');
-            ctx.clearRect(0, 0, c.width, c.height);
-            c.style.display = 'none';
-        }
-    });
+    const canvas = document.getElementById(config.canvas.id);
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
 }
