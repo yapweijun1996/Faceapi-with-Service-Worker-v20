@@ -110,6 +110,16 @@ async function main() {
         updateVerificationProgress();
 
         await initializeWorker();
+
+        // Set the action based on the current page
+        if (window.location.pathname.includes('face_register.html')) {
+            state.faceapiAction = 'register';
+        } else if (window.location.pathname.includes('face_verify.html')) {
+            state.faceapiAction = 'verify';
+            // Automatically start camera for verification
+            await startCamera();
+            video_face_detection();
+        }
     });
 }
 
