@@ -1,604 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-		<title>Face Detection</title>
-		<link rel="manifest" href="manifest.json?asset_v=1">
-		<meta name="theme-color" content="#4CAF50">
-		<meta name="apple-mobile-web-app-capable" content="yes">
-		<meta name="apple-mobile-web-app-status-bar-style" content="black">
-		<link rel="apple-touch-icon" href="icons/icon-192.png">
-		<style>
-			/* General reset */
-			* {
-				margin: 0;
-				padding: 0;
-				box-sizing: border-box;
-			}
-			
-			body {
-				font-family: Arial, sans-serif;
-				background-color: #f4f4f9;
-				display: flex;
-				align-items: center;
-				touch-action: manipulation;
-				height: 100vh;
-				flex-direction: column;
-				color: #333;
-			}
-			
-			/* Centering and spacing */
-			h1 {
-				font-size: 2rem;
-				margin-bottom: 20px;
-			}
-			
-			/* Link styles */
-			a {
-				font-size: 1rem;
-				text-decoration: none;
-				color: #007bff;
-				margin-bottom: 20px;
-			}
-			
-			a:hover {
-				text-decoration: underline;
-			}
-			
-			/* Video & overlay container */
-			.video-wrapper {
-				position: relative;
-				width: 640px;
-				max-width: 100%;
-			}
-			
-			/* Video element */
-			#video {
-				border-radius: 0px;
-				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-				width: 100%;
-				height: auto;
-				display: block;
-				transform: scaleX(-1);
-			}
-			
-			/* Canvas overlays (bounding boxes, landmarks, etc.) */
-			.overlay {
-				position: absolute;
-				top: 0;
-				left: 0;
-				width: 100%;
-				height: 100%;
-				pointer-events: none; /* allow clicks to pass through */
-				display: none; /* toggled by JS */
-				border-radius: 8px;
-			}
-			
-			/* Snapshot canvas shown next to video */
-			.snapshot {
-				border: 2px solid #333;
-				background-color: rgba(255, 255, 255, 0.7);
-				box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-				display: none; /* toggled by JS */
-				width: 640px;
-				height: 480px;
-				border-radius: 8px;
-			}
-			
-			/* Responsive video */
-			@media (max-width: 768px) {
-				.video-wrapper {
-					width: 100%;
-				}
-				
-				.snapshot {
-					max-width: 480px;
-				}
-			}
-			
-			/* Full-screen responsive container */
-			.face-detection-container{
-				width:100vw;
-				height:100vh;
-				display:flex;
-				justify-content:center;
-				align-items:center;
-				flex-wrap:wrap;
-				gap:1rem;
-				padding:1rem;
-				box-sizing:border-box;
-			}
-			
-			/* Ensure the video wrapper scales while keeping the 4/3 aspect ratio */
-			.video-wrapper{
-				aspect-ratio:4/3;
-				width:min(100vw,calc(100vh * 4 / 3));
-				max-width:100%;
-			}
-			
-			/* Video element keeps its intrinsic ratio */
-			#video{
-				width:100%;
-				height:auto;
-				object-fit:contain;
-			}
-			
-			/* Snapshot canvas follows video size */
-			.snapshot{
-				width:100%;
-				height:auto;
-				max-height:100vh;
-				aspect-ratio:4/3;
-			}
-			
-			/* Preview thumbnails container */
-			#capturePreview{
-				display:flex;
-				flex-wrap:nowrap;
-				gap:4px;
-				margin-bottom:10px;
-				max-width:100%;
-				overflow-x:auto;
-			}
-			
-			#progressContainer textarea[id^="capturePreview_"]{
-				display:none;
-			}
-			
-			.capture-thumb{
-				width:64px;
-				height:64px;
-				object-fit:cover;
-				border:1px solid #ccc;
-				border-radius:4px;
-				opacity:0;
-				transition:opacity 0.3s ease;
-			}
-			
-			.capture-thumb.show{ opacity:1; }
-			
-			/* Adapt video & snapshot to portrait (mobile) 9:16 ratio */
-			@media (orientation: portrait){
-				.face-detection-container{
-					flex-direction:column;
-					padding:0;
-				}
-				
-				.video-wrapper,
-				.snapshot{
-					width:100vw;
-					height:100vh;
-					max-width:100vw;
-					max-height:100vh;
-					aspect-ratio:auto;
-				}
-				
-				#video{
-					width:100%;
-					height:100%;
-					object-fit:cover;
-					transform: scaleX(-1);
-				}
-				
-				.overlay{
-					width:100%;
-					height:100%;
-					object-fit:cover;
-				}
-				
-			}
-			
-			#orientationOverlay{
-				position:fixed;
-				inset:0;
-				background:rgba(0,0,0,0.8);
-				color:white;
-				display:none;
-				justify-content:center;
-				align-items:center;
-				text-align:center;
-				padding:1rem;
-				z-index:9999;
-				font-size:1.2rem;
-			}
-			
-			#permissionOverlay{
-				position:fixed;
-				inset:0;
-				background:rgba(0,0,0,0.85);
-				color:white;
-				display:none;
-				justify-content:center;
-				align-items:center;
-				text-align:center;
-				padding:1rem;
-				z-index:10001;
-				font-size:1.2rem;
-			}
-			
-			#loadingOverlay{
-				position:fixed;
-				inset:0;
-				background:rgba(0,0,0,0.85);
-				color:white;
-				display:flex;
-				justify-content:center;
-				align-items:center;
-				text-align:center;
-				z-index:10000;
-				font-size:1.2rem;
-				opacity:1;
-				transition: opacity 0.5s ease;
-			}
-			
-			#instructionsOverlay{
-				position:fixed;
-				inset:0;
-				background:rgba(0,0,0,0.85);
-				color:white;
-				display:none;
-				justify-content:center;
-				align-items:center;
-				text-align:center;
-				padding:1rem;
-				z-index:10002;
-				font-size:1.2rem;
-			}
-			#instructionsOverlay button{
-				margin-top:1rem;
-				padding:12px 16px;
-				font-size:1rem;
-				border:none;
-				border-radius:6px;
-				background:#4CAF50;
-				color:#fff;
-			}
-			
-			#timeoutOverlay{
-				position:fixed;
-				inset:0;
-				background:rgba(0,0,0,0.85);
-				color:white;
-				display:none;
-				justify-content:center;
-				align-items:center;
-				text-align:center;
-				padding:1rem;
-				z-index:10003;
-				font-size:1.2rem;
-			}
-			#timeoutOverlay button{
-				margin:0.5rem;
-				padding:12px 16px;
-				font-size:1rem;
-				border:none;
-				border-radius:6px;
-				background:#4CAF50;
-				color:#fff;
-			}
-			
-			/* Touch-friendly buttons */
-			.controls{
-				display:flex;
-				flex-wrap:wrap;
-				gap:0.5rem;
-				margin:10px 0;
-				justify-content:center;
-				align-items:center;
-			}
-			#progressContainer{
-				position:fixed;
-				bottom:0;
-				left:0;
-				width:100%;
-				z-index:999;
-				background:rgba(255,255,255,0.8);
-				box-shadow:0 -2px 4px rgba(0,0,0,0.1);
-				padding:0.5rem;
-				margin: 0 auto;
-				border-radius: 25px 25px 0px 0px;
-			}
-			#progressButtons{
-				width:100%;
-				display:flex;
-				flex-wrap:wrap;
-				gap:0.5rem;
-				justify-content:center;
-				align-items:center;
-				max-height:0;
-				opacity:0;
-				overflow:hidden;
-				transition:max-height 0.3s ease, opacity 0.3s ease;
-			}
-			#progressContainer.expanded #progressButtons{
-				max-height:200px;
-				opacity:1;
-			}
-			#progressContainer.expanded #capturePreview{
-				flex-wrap:wrap;
-				overflow-y:auto;
-			}
-			.ctrl-btn{
-				padding:14px 18px;
-				font-size:1.1rem;
-				border:none;
-				border-radius:6px;
-				background:#4CAF50;
-				color:#fff;
-			}
-			.ctrl-btn-warning{ background:#FFC107; }
-			.ctrl-btn-danger{ background:#F44336; }
-			.ctrl-btn-success{ background:#4CAF50; }
-			.ctrl-btn:active{
-				transform:scale(0.97);
-			}
-			
-			#progressBar{
-				width:100%;
-				background:#eee;
-				height:10px;
-				border-radius:4px;
-				overflow:hidden;
-				margin:4px 0;
-				flex:1 0 100%;
-			}
-			
-			#progressFill{
-				width:0;
-				height:100%;
-				background:#4CAF50;
-				transition:width 0.3s ease;
-			}
-			
-			#timerText{
-				margin-left:0.5rem;
-				font-weight:bold;
-			}
-			
-			@media(max-width:768px){
-				.ctrl-btn{
-					flex:1 0 100%;
-					margin-top:0.5rem;
-				}
-			}
-			
-			#messageOverlay{
-				position:absolute;
-				top:0;
-				left:0;
-				width:100%;
-				text-align:center;
-				pointer-events:none;
-				z-index:20;
-			}
-			
-			#messageOverlay > *{
-				margin:4px 8px;
-				padding:4px 8px;
-				font-size:0.9rem;
-				background:rgba(0,0,0,0.6);
-				color:#fff;
-				border-radius:4px;
-				display:inline-block;
-			}
-			#registrationMessage{
-				display:none;
-			}
-			.modal{
-				position:fixed;
-				inset:0;
-				background:rgba(0,0,0,0.8);
-				display:none;
-				justify-content:center;
-				align-items:center;
-				z-index:10004;
-			}
-			.modal img{
-				max-width:90%;
-				max-height:90%;
-			}
-			.modal .prev,
-			.modal .next{
-				position:absolute;
-				top:50%;
-				transform:translateY(-50%);
-				font-size:2rem;
-				color:#fff;
-				padding:0 10px;
-				cursor:pointer;
-				user-select:none;
-				
-				box-shadow: 0 0px 9px rgba(0, 0, 0, 0.45), 0 0px 20px rgba(0, 0, 0, 0.20);
-				background: rgba(0, 0, 0, 0.3);
-				border-radius: 50%;
-			}
-			.modal .prev{ left:10px; }
-			.modal .next{ right:10px; }
-		</style>
-		
-		<!-- Load face-api core library first -->
-		<script src="./js/face-api.min.js?asset_v=1"></script>
-		<!-- Load the main application module -->
-		<script type="module" src="./refactored/main.js?asset_v=1"></script>
-		<script>
-			function urlReplace(url) {
-				window.location.replace(url);
-			}
-			function hideLoadingOverlay(){
-				const el = document.getElementById('loadingOverlay');
-				if(el){
-					el.style.opacity = '0';
-					setTimeout(() => { el.style.display = 'none'; }, 500);
-				}
-			}
-			
-			function showPermissionOverlay(){
-				const el = document.getElementById('permissionOverlay');
-				if(el){
-					el.style.display = 'flex';
-				}
-			}
-			
-			function showInstructions(){
-				const el = document.getElementById('instructionsOverlay');
-				if(el){
-					el.style.display = 'flex';
-				}
-			}
-			function hideInstructions(){
-				const el = document.getElementById('instructionsOverlay');
-				if(el){
-					el.style.display = 'none';
-					localStorage.setItem('instructionsShown','1');
-				}
-			}
-			
-			function showTimeoutOverlay(){
-				const el = document.getElementById('timeoutOverlay');
-				if(el){
-					el.style.display = 'flex';
-					const container = document.getElementById('progressContainer');
-					if(container){
-						container.classList.add('expanded');
-					}
-				}
-			}
-			
-			function hideTimeoutOverlay(){
-				const el = document.getElementById('timeoutOverlay');
-				if(el){
-					el.style.display = 'none';
-				}
-			}
-		</script>
-	</head>
-	<body>
-		<div id="loadingOverlay">Loading face detection models...</div>
-		<div id="orientationOverlay">Please rotate your device to portrait orientation for best results.</div>
-		<div id="permissionOverlay">Camera access is required. Please grant permission or open this page in a supported browser.</div>
-		<div id="instructionsOverlay">
-			<div>
-				<p>Step 1: Position your face within the frame.</p>
-				<p>Step 2: Slowly turn your head left and right.</p>
-				<p>Step 3: Tap capture when ready.</p>
-				<button onclick="hideInstructions()">Got it</button>
-			</div>
-		</div>
-		<div id="timeoutOverlay">
-			<div>
-				<p>Registration timed out.</p>
-				<p>Please ensure good lighting and try again.</p>
-				<button onclick="hideTimeoutOverlay(); restartRegistration()">Retry</button>
-				<button onclick="hideTimeoutOverlay(); cancelRegistration()">Cancel</button>
-			</div>
-		</div>
-		<div style="display:none;">
-			<h1>Face Detection</h1>
-			<a href="#" onclick="urlReplace('index.html')">Go to Index</a><br>
-			<input type="file" id="jsonFileInput" accept=".json" onchange="handleJsonFileInput(event)" multiple>
-			<textarea class="user_face_id_json" style="display:none;"></textarea>
-			<!-- Add user ID and name inputs -->
-			<label>User ID: <input type="text" id="userIdInput" placeholder="Enter user ID"></label>
-			<label>User Name: <input type="text" id="userNameInput" placeholder="Enter user name"></label><br>
-		</div>
-		<div id="progressContainer" class="controls">
-			<span id="progressText">0/20 captures</span>
-			<span id="timerText"></span>
-			<div id="progressBar"><div id="progressFill"></div></div>
-			<div id="progressButtons">
-				<div style="display:none;">
-					<button id="retakeBtn" class="ctrl-btn">Retake Last</button>
-				</div>
-				<button id="restartBtn" class="ctrl-btn ctrl-btn-warning">Restart</button>
-				<button id="cancelBtn" class="ctrl-btn ctrl-btn-danger">Cancel</button>
-				<button id="downloadBtn" class="ctrl-btn ctrl-btn-success" style="display:none;">Download</button>
-			</div>
-			<div id="capturePreview"></div>
-		</div>
-		<div id="imageModal" class="modal">
-			<span class="close">&times;</span>
-			<span class="prev">&#10094;</span>
-			<img>
-			<span class="next">&#10095;</span>
-		</div>
-		<script>
-			function getParam(name) {
-				const params = new URLSearchParams(window.location.search);
-				return params.get(name);
-			}
-			document.addEventListener('DOMContentLoaded', async () => {
-				const defId = getParam('userid') || 'test001';
-				const defName = getParam('username') || 'test';
-				document.getElementById('userIdInput').value = defId;
-				document.getElementById('userNameInput').value = defName;
-				checkOrientation();
-				if(!localStorage.getItem('instructionsShown')){
-					showInstructions();
-				}
-			});
-			
-			function checkOrientation(){
-				const overlay = document.getElementById('orientationOverlay');
-				const isMobile = window.matchMedia('(max-width: 768px)').matches;
-				if(isMobile && window.innerWidth > window.innerHeight){
-					overlay.style.display = 'flex';
-				}else{
-					overlay.style.display = 'none';
-				}
-			}
-			
-			window.addEventListener('orientationchange', checkOrientation);
-			window.addEventListener('resize', checkOrientation);
-			
-			document.addEventListener('DOMContentLoaded', () => {
-				const container = document.getElementById('progressContainer');
-				const video = document.getElementById('video');
-				const modal = document.getElementById('imageModal');
-				container.addEventListener('click', (e) => {
-					if(e.target.classList.contains('capture-thumb')) return;
-					container.classList.toggle('expanded');
-					if(container.classList.contains('expanded')){
-						video.pause();
-						if(typeof pauseRegistrationTimer === 'function') pauseRegistrationTimer();
-					} else {
-						video.play();
-						if(typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
-					}
-					e.stopPropagation();
-				});
-				document.addEventListener('click', (e) => {
-					if(modal && modal.style.display === 'flex') return;
-					if(!container.contains(e.target)){
-						const wasExpanded = container.classList.contains('expanded');
-						container.classList.remove('expanded');
-						if(wasExpanded){
-							video.play();
-							if(typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
-						}
-					}
-				});
-			});
-		</script>
-		
-		<div class="face-detection-container"  style="display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;">
-			<div class="video-wrapper">
-				<video id="video" width="640" height="480" autoplay playsinline muted></video>
-				<!-- Hidden canvas for inference: captures each video frame to send to the worker for face detection -->
-				<canvas id="canvas" class="overlay"></canvas>
-				<!-- Overlay canvas for drawing facial landmarks on top of the video -->
-				<canvas id="canvas2" class="overlay"></canvas>
-				<!-- Overlay canvas for drawing face bounding boxes and confidence scores -->
-				<canvas id="canvas3" class="overlay"></canvas>
-				<div id="messageOverlay">
-					<div id="registrationMessage"></div>
-					<p id="tips">Keep your face centered and move slowly.</p>
-				</div>
-			</div>
-			<!-- Snapshot canvas: displays the captured face image along with the confidence percentage -->
-			<canvas id="canvas_output" class="snapshot"></canvas>
-		</div>
-		
-		
-	</body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>User Registration - Face Verification</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4CAF50">
+</head>
+<body>
+
+    <header>
+        <h1>User Registration</h1>
+    </header>
+
+    <main>
+        <div class="container registration-container">
+            <!-- Step 1: User Info -->
+            <div id="userInfoStep">
+                <h2>Step 1: Enter Your Details</h2>
+                <div class="form-group">
+                    <label for="userIdInput">User ID:</label>
+                    <input type="text" id="userIdInput" placeholder="e.g., user123">
+                </div>
+                <div class="form-group">
+                    <label for="userNameInput">User Name:</label>
+                    <input type="text" id="userNameInput" placeholder="e.g., John Doe">
+                </div>
+                <button id="startRegistrationBtn" class="btn btn-primary">Start Camera</button>
+            </div>
+
+            <!-- Step 2: Face Capture -->
+            <div id="captureStep" style="display:none;">
+                <h2>Step 2: Capture Your Face</h2>
+                <p>Please look directly at the camera and hold still.</p>
+                <div class="face-detection-container">
+                    <div class="video-wrapper">
+                        <video id="video" width="640" height="480" autoplay playsinline muted></video>
+                        <canvas id="canvas" class="overlay"></canvas>
+                        <canvas id="canvas2" class="overlay"></canvas>
+                        <canvas id="canvas3" class="overlay"></canvas>
+                    </div>
+                </div>
+                <div id="progressContainer" class="controls">
+                    <span id="progressText">0/20 captures</span>
+                    <div id="progressBar"><div id="progressFill"></div></div>
+                    <div id="progressButtons">
+                        <button id="restartBtn" class="btn btn-secondary">Restart</button>
+                        <button id="cancelBtn" class="btn btn-danger">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Face Verification Inc. All rights reserved.</p>
+    </footer>
+
+    <!-- Overlays -->
+    <div id="loadingOverlay" style="display:none;">Loading...</div>
+    <div id="permissionOverlay" style="display:none;">Camera permission denied.</div>
+
+    <script type="module" src="./refactored/main.js"></script>
+</body>
 </html>
