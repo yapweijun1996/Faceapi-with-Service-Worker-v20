@@ -60,6 +60,7 @@ function isCaptureQualityHigh(detection) {
 // --- Drawing Functions ---
 
 function drawAllFaces(detectionsArray) {
+    console.log('[drawAllFaces] Drawing detections:', detectionsArray);
     if (!Array.isArray(detectionsArray) || detectionsArray.length === 0) {
         clearAllCanvases();
         return;
@@ -189,6 +190,7 @@ function faceApiRegister(descriptor) {
  * @param {object} data - Detection result from worker.
  */
 export function handleDetectionResult(data) {
+    console.log('[handleDetectionResult] Received data:', data);
     const dets = data.detections[0];
     const imageDataForFrame = data.detections[1] && data.detections[1][0];
 
