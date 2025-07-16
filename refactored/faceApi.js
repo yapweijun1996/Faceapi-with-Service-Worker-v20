@@ -311,7 +311,7 @@ export function handleWarmupResult() {
     console.log('Warmup completed by worker.');
 }
 
-// --- Registration Controls ---
+/* --- Registration Controls --- */
 
 export function restartRegistration() {
     state.registration.currentUserDescriptors = [];
@@ -359,4 +359,23 @@ export function downloadRegistrationData() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+/* --- Verification Controls --- */
+
+export function restartVerification() {
+    state.verification.verifiedUserIds.clear();
+    state.verification.verifiedCount = 0;
+    state.verification.isCompleted = false;
+    // Optionally reset UI list and progress
+    import('./ui.js').then(ui => {
+        ui.resetVerificationList();
+        ui.updateVerificationProgress();
+    });
+    showMessage('success', 'Verification restarted.');
+}
+
+export function cancelVerification() {
+    stopCamera();
+    window.location.href = 'index.html';
 }
