@@ -65,14 +65,24 @@ function drawAllFaces(detectionsArray) {
         return;
     }
     const canvas = document.getElementById(config.canvas.overlay);
-    if (!canvas) return;
-    canvas.style.display = 'block';
     const video = document.getElementById(config.video.id);
-    if (!video) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    if (!canvas || !video) return;
+
+    // Use the video's display size for overlay
+    const displayWidth = video.clientWidth;
+    const displayHeight = video.clientHeight;
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+    canvas.style.display = 'block';
+
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // The detection coordinates are based on the model input (video.videoWidth/video.videoHeight)
+    // We need to scale them to the display size (clientWidth/clientHeight)
+    const scaleX = displayWidth / video.videoWidth;
+    const scaleY = displayHeight / video.videoHeight;
+
     detectionsArray.forEach((det) => {
         // Draw bounding box
         if (config.features.showFaceBox && det.alignedRect && det.alignedRect._box) {
@@ -80,7 +90,12 @@ function drawAllFaces(detectionsArray) {
             ctx.save();
             ctx.strokeStyle = 'lime';
             ctx.lineWidth = 2;
-            ctx.strokeRect(box._x, box._y, box._width, box._height);
+            ctx.strokeRect(
+                box._x * scaleX,
+                box._y * scaleY,
+                box._width * scaleX,
+                box._height * scaleY
+            );
             ctx.restore();
         }
         // Draw landmarks
@@ -89,7 +104,7 @@ function drawAllFaces(detectionsArray) {
             ctx.fillStyle = 'red';
             det.landmarks._positions.forEach(pt => {
                 ctx.beginPath();
-                ctx.arc(pt._x, pt._y, 2, 0, 2 * Math.PI);
+                ctx.arc(pt._x * scaleX, pt._y * scaleY, 2, 0, 2 * Math.PI);
                 ctx.fill();
             });
             ctx.restore();
