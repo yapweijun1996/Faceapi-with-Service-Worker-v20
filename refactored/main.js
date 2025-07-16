@@ -52,6 +52,7 @@ function adjustDetectionForDevice() {
  */
 async function handleJsonFileSelect(event) {
     const files = event.target.files;
+    console.log('[DEBUG] handleJsonFileSelect called, files:', files);
     if (!files || files.length === 0) {
         showMessage('error', 'No files selected.');
         return;
@@ -93,12 +94,14 @@ async function handleJsonFileSelect(event) {
         await Promise.all(fileReadPromises);
     } catch (err) {
         showMessage('error', err.message);
+        console.error('[DEBUG] Error reading/parsing JSON:', err);
         // Do not reset the file input here; let the user manually re-select if needed
         return;
     }
 
     if (state.verification.registeredUsers.length === 0) {
         showMessage('error', 'No valid user data found in the selected files.');
+        console.error('[DEBUG] No valid user data found in selected files.');
         return;
     }
 
@@ -111,8 +114,15 @@ async function handleJsonFileSelect(event) {
     document.getElementById('verifyStep').style.display = 'block';
 
     // Start the camera and detection loop
-    await startCamera();
-    video_face_detection();
+    try {
+        console.log('[DEBUG] Starting camera for verification...');
+        await startCamera();
+        console.log('[DEBUG] Camera started, starting video_face_detection...');
+        video_face_detection();
+    } catch (err) {
+        showMessage('error', 'Failed to start camera: ' + err.message);
+        console.error('[DEBUG] Failed to start camera:', err);
+    }
 }
 
 /**
