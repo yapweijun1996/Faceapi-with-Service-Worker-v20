@@ -10,16 +10,18 @@ import { config } from './config.js';
 import { state } from './state.js';
 import { initializeWorker } from './worker.js';
 import { startCamera, stopCamera } from './camera.js';
-import { video_face_detection } from './faceApi.js';
-import { loadProgress, clearProgress } from './db.js';
 import {
-    updateRegistrationProgress,
-    updateVerificationProgress,
+    video_face_detection,
     retakeLastCapture,
     restartRegistration,
     cancelRegistration,
     restartVerification,
     cancelVerification,
+} from './faceApi.js';
+import { loadProgress, clearProgress } from './db.js';
+import {
+    updateRegistrationProgress,
+    updateVerificationProgress,
     downloadRegistrationData,
     showModalImage,
     hideModal,

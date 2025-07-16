@@ -20,6 +20,7 @@ import {
     clearAllCanvases,
     clearCapturePreviews,
     removeLastCapturePreview,
+    resetVerificationList,
 } from './ui.js';
 import { stopCamera } from './camera.js';
 import { saveProgress, clearProgress } from './db.js';
@@ -315,4 +316,61 @@ export function video_face_detection() {
 
     state.videoDetectionStep = step;
     requestAnimationFrame(step);
+}
+
+// --- Public API ---
+
+/**
+ * Restarts the registration process.
+ */
+export function restartRegistration() {
+    state.registration.currentUserDescriptors = [];
+    state.registration.capturedFrames = [];
+    state.registration.isCompleted = false;
+    clearCapturePreviews();
+    updateRegistrationProgress();
+    clearProgress(); // Clears from DB
+    showMessage('success', 'Registration restarted.');
+}
+
+/**
+ * Cancels the registration process and redirects to the main page.
+ */
+export function cancelRegistration() {
+    stopCamera();
+    window.location.href = 'index.html';
+}
+
+/**
+ * Retakes the last capture.
+ */
+export function retakeLastCapture() {
+    if (state.registration.currentUserDescriptors.length > 0) {
+        state.registration.currentUserDescriptors.pop();
+        state.registration.capturedFrames.pop();
+        removeLastCapturePreview();
+        updateRegistrationProgress();
+        saveProgress();
+        showMessage('success', 'Last capture removed.');
+    }
+}
+
+/**
+ * Restarts the verification process.
+ */
+export function restartVerification() {
+    state.verification.verifiedUserIds.clear();
+    state.verification.verifiedCount = 0;
+    state.verification.isCompleted = false;
+    resetVerificationList();
+    updateVerificationProgress();
+    showMessage('success', 'Verification restarted.');
+}
+
+/**
+ * Cancels the verification process and redirects to the main page.
+ */
+export function cancelVerification() {
+    stopCamera();
+    window.location.href = 'index.html';
 }
