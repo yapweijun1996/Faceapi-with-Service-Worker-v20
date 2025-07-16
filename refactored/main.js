@@ -17,12 +17,12 @@ import {
     cancelRegistration,
     restartVerification,
     cancelVerification,
+    downloadRegistrationData,
 } from './faceApi.js';
 import { loadProgress, clearProgress } from './db.js';
 import {
     updateRegistrationProgress,
     updateVerificationProgress,
-    downloadRegistrationData,
     showModalImage,
     hideModal,
 } from './ui.js';

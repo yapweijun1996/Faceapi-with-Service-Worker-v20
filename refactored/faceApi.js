@@ -374,3 +374,30 @@ export function cancelVerification() {
     stopCamera();
     window.location.href = 'index.html';
 }
+
+/**
+ * Downloads the user's registration data as a JSON file.
+ */
+export function downloadRegistrationData() {
+    if (state.registration.currentUserDescriptors.length < config.registration.maxCaptures) {
+        alert('Please complete the registration before downloading.');
+        return;
+    }
+
+    const data = {
+        id: state.registration.currentUserId,
+        name: state.registration.currentUserName,
+        descriptors: state.registration.currentUserDescriptors.map(d => Array.from(d)),
+        capturedFrames: state.registration.capturedFrames,
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${state.registration.currentUserId}_${state.registration.currentUserName}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
