@@ -86,6 +86,15 @@ function initializeEventListeners() {
             showModalImage(parseInt(e.target.dataset.index, 10));
         }
     });
+
+    // Start camera on registration page
+    document.getElementById('startRegistrationBtn')?.addEventListener('click', async () => {
+        // Hide user info and show capture step
+        document.getElementById('userInfoStep').style.display = 'none';
+        document.getElementById('captureStep').style.display = 'block';
+        await startCamera();
+        video_face_detection();
+    });
 }
 
 /**
@@ -101,12 +110,6 @@ async function main() {
         updateVerificationProgress();
 
         await initializeWorker();
-
-        // Start camera and detection if on a relevant page
-        if (window.location.pathname.includes('face_register.html') || window.location.pathname.includes('face_verify.html')) {
-            await startCamera();
-            video_face_detection();
-        }
     });
 }
 
