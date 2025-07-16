@@ -93,8 +93,7 @@ async function handleJsonFileSelect(event) {
         await Promise.all(fileReadPromises);
     } catch (err) {
         showMessage('error', err.message);
-        // Clear the file input so the user can try again
-        event.target.value = '';
+        // Do not reset the file input here; let the user manually re-select if needed
         return;
     }
 
