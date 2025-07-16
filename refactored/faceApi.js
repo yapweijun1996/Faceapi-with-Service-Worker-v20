@@ -150,6 +150,7 @@ function drawAllFaces(detectionsArray) {
     // Draw on overlay canvas
     const canvas = document.getElementById(config.canvas.overlay);
     if (!canvas) return;
+    canvas.style.display = 'block'; // Ensure overlay is visible
     const ctx = canvas.getContext('2d');
     // Match canvas size to video
     const video = document.getElementById(config.video.id);
