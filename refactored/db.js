@@ -37,7 +37,7 @@ export function saveProgress() {
         id: state.registration.currentUserId,
         name: state.registration.currentUserName,
         descriptors: state.registration.currentUserDescriptors.map(d => Array.from(d)),
-        frames: state.registration.capturedFrames,
+        capturedFrames: state.registration.capturedFrames,
     };
     openProgressDB().then(db => {
         const tx = db.transaction(config.db.store, 'readwrite');
@@ -60,7 +60,7 @@ export function loadProgress() {
             state.registration.currentUserId = data.id || '';
             state.registration.currentUserName = data.name || '';
             state.registration.currentUserDescriptors = data.descriptors.map(arr => new Float32Array(arr));
-            state.registration.capturedFrames = Array.isArray(data.frames) ? data.frames : [];
+            state.registration.capturedFrames = Array.isArray(data.capturedFrames) ? data.capturedFrames : [];
 
             const idInput = document.getElementById(config.ui.userIdInput);
             const nameInput = document.getElementById(config.ui.userNameInput);

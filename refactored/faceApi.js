@@ -7,6 +7,7 @@
  * (like bounding boxes and landmarks) on the canvas overlays.
  */
 
+import * as faceapi from '../js/face-api.js';
 import { config } from './config.js';
 import { state } from './state.js';
 import {
