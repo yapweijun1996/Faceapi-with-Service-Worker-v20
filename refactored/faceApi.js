@@ -20,7 +20,6 @@ import {
     clearAllCanvases,
     clearCapturePreviews,
     removeLastCapturePreview,
-    drawRegistrationOverlay,
 } from './ui.js';
 import { stopCamera } from './camera.js';
 import { saveProgress, clearProgress } from './db.js';
