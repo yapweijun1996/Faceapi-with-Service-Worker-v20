@@ -21,6 +21,12 @@ export async function startCamera() {
         return;
     }
 
+    // Ensure parent container is visible (for verification step)
+    const verifyStep = document.getElementById('verifyStep');
+    if (verifyStep) {
+        verifyStep.style.display = 'block';
+    }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error('getUserMedia not supported');
         showMessage('error', 'Camera not supported in this browser.');
@@ -31,6 +37,7 @@ export async function startCamera() {
     video.setAttribute('muted', '');
     video.setAttribute('autoplay', '');
     video.style.display = 'block';
+    console.log('Camera started, video element set to display:block');
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
