@@ -148,16 +148,18 @@ function faceApiRegister(descriptor) {
 }
 
 /**
- * Handles detection results for registration (refactored).
+ * Handles detection results for registration and verification (refactored).
  * @param {object} data - Detection result from worker.
  */
 export function handleDetectionResult(data) {
     const dets = data.detections[0];
     const imageDataForFrame = data.detections[1] && data.detections[1][0];
-    state.registration.lastFaceImageData = imageDataForFrame;
-    drawAllFaces(Array.isArray(dets) ? dets : []);
-    if (Array.isArray(dets) && dets.length > 0) {
-        if (state.faceapiAction === "register") {
+
+    // Registration flow
+    if (state.faceapiAction === "register") {
+        state.registration.lastFaceImageData = imageDataForFrame;
+        drawAllFaces(Array.isArray(dets) ? dets : []);
+        if (Array.isArray(dets) && dets.length > 0) {
             if (dets.length !== 1) {
                 showMessage('error', 'Multiple faces detected. Please ensure only your face is visible.');
             } else {
@@ -169,13 +171,82 @@ export function handleDetectionResult(data) {
                     faceApiRegister(descriptor);
                 }
             }
+        } else {
+            showMessage("error", "No face detected. Make sure your face is fully visible and well lit.");
         }
-    } else {
-        showMessage("error", "No face detected. Make sure your face is fully visible and well lit.");
     }
+
+    // Verification flow
+    if (state.faceapiAction === "verify") {
+        drawAllFaces(Array.isArray(dets) ? dets : []);
+        if (Array.isArray(dets) && dets.length > 0) {
+            // Only consider the first detected face for verification
+            const descriptor = dets[0].descriptor;
+            if (!isCaptureQualityHigh(dets[0])) {
+                showMessage('error', 'Low-quality capture. Ensure good lighting and face the camera.');
+            } else {
+                faceApiVerify(descriptor);
+            }
+        } else {
+            showMessage("error", "No face detected. Make sure your face is fully visible and well lit.");
+        }
+    }
+
     state.isDetectingFrame = false;
     if (typeof state.videoDetectionStep === 'function') {
         requestAnimationFrame(state.videoDetectionStep);
+    }
+}
+
+/**
+ * Handles the main face verification logic (refactored).
+ * @param {Float32Array} descriptor - The descriptor of the detected face.
+ */
+function faceApiVerify(descriptor) {
+    if (!descriptor || state.verification.isCompleted) return;
+
+    let matchedUserIndex = -1;
+    let minDistance = Infinity;
+
+    // Find the closest match among all registered descriptors
+    for (let i = 0; i < state.verification.flatRegisteredDescriptors.length; i++) {
+        const refDesc = state.verification.flatRegisteredDescriptors[i];
+        const distance = euclideanDistance(descriptor, refDesc);
+        if (distance < minDistance) {
+            minDistance = distance;
+            matchedUserIndex = i;
+        }
+    }
+
+    // Check if the closest match is within the threshold
+    if (
+        matchedUserIndex !== -1 &&
+        minDistance < config.verification.distanceThreshold
+    ) {
+        const userMeta = state.verification.flatRegisteredUserMeta[matchedUserIndex];
+        const uid = userMeta.id;
+
+        if (uid && !state.verification.verifiedUserIds.has(uid)) {
+            state.verification.verifiedUserIds.add(uid);
+            state.verification.verifiedCount++;
+
+            // UI feedback and progress
+            import('./ui.js').then(ui => {
+                ui.updateUserVerificationStatus(uid);
+                ui.updateVerificationProgress();
+                ui.showVerifyToast(`${userMeta.name} (${userMeta.id}) verified`);
+            });
+
+            // Complete verification if all users are verified
+            if (state.verification.verifiedCount >= state.verification.totalFaces) {
+                stopCamera();
+                state.verification.isCompleted = true;
+                clearAllCanvases();
+                // Show verification complete overlay
+                const overlay = document.getElementById('verifyCompleteOverlay');
+                if (overlay) overlay.style.display = 'block';
+            }
+        }
     }
 }
 
@@ -217,6 +288,27 @@ export function video_face_detection() {
     };
     state.videoDetectionStep = step;
     requestAnimationFrame(step);
+}
+
+/**
+ * Handles the event when face-api.js models are loaded by the worker.
+ */
+export function handleModelsLoaded() {
+    console.log('Face detection models loaded by worker.');
+    state.isFaceApiReady = true;
+    if (typeof state.resolveFaceApiReady === 'function') {
+        state.resolveFaceApiReady();
+    }
+    // Hide loading overlay if present
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * Handles the event when the worker completes warmup.
+ */
+export function handleWarmupResult() {
+    console.log('Warmup completed by worker.');
 }
 
 // --- Registration Controls ---
