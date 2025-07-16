@@ -146,7 +146,40 @@ function drawAllFaces(detectionsArray) {
         clearAllCanvases();
         return;
     }
-    // Implement drawAllLandmarks and drawAllBoxesAndLabels if multi-face is needed
+
+    // Draw on overlay canvas
+    const canvas = document.getElementById(config.canvas.overlay);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    // Match canvas size to video
+    const video = document.getElementById(config.video.id);
+    if (!video) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    detectionsArray.forEach(det => {
+        // Draw bounding box
+        if (config.features.showFaceBox && det.alignedRect && det.alignedRect._box) {
+            const box = det.alignedRect._box;
+            ctx.save();
+            ctx.strokeStyle = 'lime';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(box._x, box._y, box._width, box._height);
+            ctx.restore();
+        }
+        // Draw landmarks
+        if (config.features.showLandmarks && det.landmarks && det.landmarks._positions) {
+            ctx.save();
+            ctx.fillStyle = 'red';
+            det.landmarks._positions.forEach(pt => {
+                ctx.beginPath();
+                ctx.arc(pt._x, pt._y, 2, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+    });
 }
 
 // --- Core Logic ---
