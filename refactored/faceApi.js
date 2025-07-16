@@ -26,6 +26,22 @@ import {
 import { stopCamera } from './camera.js';
 import { saveProgress, clearProgress } from './db.js';
 
+/**
+ * Computes the Euclidean distance between two Float32Array vectors.
+ * @param {Float32Array} a
+ * @param {Float32Array} b
+ * @returns {number}
+ */
+function euclideanDistance(a, b) {
+    if (!a || !b || a.length !== b.length) return Infinity;
+    let sum = 0;
+    for (let i = 0; i < a.length; i++) {
+        const diff = a[i] - b[i];
+        sum += diff * diff;
+    }
+    return Math.sqrt(sum);
+}
+
 // --- Helper Functions ---
 
 /**
@@ -56,7 +72,7 @@ function computeMeanDescriptor(descriptors) {
 function isConsistentWithCurrentUser(descriptor) {
     if (state.registration.currentUserDescriptors.length === 0) return true;
     return state.registration.currentUserDescriptors.every(refDesc =>
-        faceapi.euclideanDistance(descriptor, refDesc) < config.feedback.consistencyThreshold
+        euclideanDistance(descriptor, refDesc) < config.feedback.consistencyThreshold
     );
 }
 
@@ -68,7 +84,7 @@ function isConsistentWithCurrentUser(descriptor) {
 function isDuplicateAcrossUsers(descriptor) {
     if (!descriptor || state.verification.flatRegisteredDescriptors.length === 0) return false;
     return state.verification.flatRegisteredDescriptors.some(ref =>
-        faceapi.euclideanDistance(descriptor, ref) < config.feedback.duplicateThreshold
+        euclideanDistance(descriptor, ref) < config.feedback.duplicateThreshold
     );
 }
 
@@ -151,7 +167,7 @@ function faceApiRegister(descriptor) {
     if (state.registration.currentUserDescriptors.length === 0) {
         accept = true;
     } else {
-        const distances = state.registration.currentUserDescriptors.map(d => faceapi.euclideanDistance(descriptor, d));
+        const distances = state.registration.currentUserDescriptors.map(d => euclideanDistance(descriptor, d));
         const minDist = Math.min(...distances);
         state.registration.attemptDistances.push(minDist);
 
@@ -194,7 +210,7 @@ async function faceApiVerify(descriptor, imageData) {
 
     for (let i = 0; i < state.verification.flatRegisteredDescriptors.length; i++) {
         const refDesc = state.verification.flatRegisteredDescriptors[i];
-        const distance = faceapi.euclideanDistance(descriptor, refDesc);
+        const distance = euclideanDistance(descriptor, refDesc);
 
         if (distance < config.verification.distanceThreshold) {
             const userMeta = state.verification.flatRegisteredUserMeta[i];
