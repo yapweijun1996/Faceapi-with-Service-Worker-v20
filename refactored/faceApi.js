@@ -149,17 +149,28 @@ function drawAllFaces(detectionsArray) {
 
     // Draw on overlay canvas
     const canvas = document.getElementById(config.canvas.overlay);
-    if (!canvas) return;
+    if (!canvas) {
+        console.warn('[DEBUG] Overlay canvas not found');
+        return;
+    }
     canvas.style.display = 'block'; // Ensure overlay is visible
-    const ctx = canvas.getContext('2d');
-    // Match canvas size to video
+
     const video = document.getElementById(config.video.id);
-    if (!video) return;
+    if (!video) {
+        console.warn('[DEBUG] Video element not found');
+        return;
+    }
+    // Always match overlay canvas size to video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    detectionsArray.forEach(det => {
+    detectionsArray.forEach((det, idx) => {
+        // Debug log for detection object
+        console.log(`[DEBUG] drawAllFaces detection[${idx}]`, det);
+
         // Draw bounding box
         if (config.features.showFaceBox && det.alignedRect && det.alignedRect._box) {
             const box = det.alignedRect._box;
