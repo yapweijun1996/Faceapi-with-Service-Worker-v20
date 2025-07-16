@@ -15,8 +15,8 @@ export const config = {
     },
     canvas: {
         id: "canvas",
-        overlay: "canvas2",
-        box: "canvas3",
+        overlay: "canvas",
+        box: "canvas",
     },
     ui: {
         progressText: "progressText",
