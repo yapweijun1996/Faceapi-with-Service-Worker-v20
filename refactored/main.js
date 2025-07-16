@@ -25,6 +25,8 @@ import {
     updateVerificationProgress,
     showModalImage,
     hideModal,
+    populateVerificationList,
+    showMessage,
 } from './ui.js';
 
 /**
@@ -41,6 +43,77 @@ function adjustDetectionForDevice() {
     } catch (err) {
         console.warn('Device capability detection failed', err);
     }
+}
+
+/**
+ * Handles the selection of JSON files for verification.
+ * Reads the files, updates the state, and starts the verification process.
+ * @param {Event} event - The file input change event.
+ */
+async function handleJsonFileSelect(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+        showMessage('error', 'No files selected.');
+        return;
+    }
+
+    // Reset previous verification state
+    state.verification.registeredUsers = [];
+    state.verification.flatRegisteredDescriptors = [];
+    state.verification.flatRegisteredUserMeta = [];
+    state.verification.verifiedUserIds.clear();
+    state.verification.verifiedCount = 0;
+
+    const fileReadPromises = Array.from(files).map(file => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data && data.id && data.descriptors && Array.isArray(data.descriptors)) {
+                        state.verification.registeredUsers.push(data);
+                        data.descriptors.forEach(desc => {
+                            state.verification.flatRegisteredDescriptors.push(new Float32Array(desc));
+                            state.verification.flatRegisteredUserMeta.push({ id: data.id, name: data.name });
+                        });
+                        resolve();
+                    } else {
+                        reject(new Error(`Invalid JSON format in ${file.name}`));
+                    }
+                } catch (err) {
+                    reject(new Error(`Error parsing ${file.name}: ${err.message}`));
+                }
+            };
+            reader.onerror = (err) => reject(new Error(`Error reading ${file.name}: ${err.message}`));
+            reader.readAsText(file);
+        });
+    });
+
+    try {
+        await Promise.all(fileReadPromises);
+    } catch (err) {
+        showMessage('error', err.message);
+        // Clear the file input so the user can try again
+        event.target.value = '';
+        return;
+    }
+
+    if (state.verification.registeredUsers.length === 0) {
+        showMessage('error', 'No valid user data found in the selected files.');
+        return;
+    }
+
+    state.verification.totalFaces = state.verification.registeredUsers.length;
+    populateVerificationList();
+    updateVerificationProgress();
+
+    // Switch UI from loading step to verification step
+    document.getElementById('loadDataStep').style.display = 'none';
+    document.getElementById('verifyStep').style.display = 'block';
+
+    // Start the camera and detection loop
+    await startCamera();
+    video_face_detection();
 }
 
 /**
@@ -95,6 +168,9 @@ function initializeEventListeners() {
         await startCamera();
         video_face_detection();
     });
+
+    // Verification file input
+    document.getElementById('jsonFileInput')?.addEventListener('change', handleJsonFileSelect);
 }
 
 /**
@@ -116,9 +192,6 @@ async function main() {
             state.faceapiAction = 'register';
         } else if (window.location.pathname.includes('face_verify.html')) {
             state.faceapiAction = 'verify';
-            // Automatically start camera for verification
-            await startCamera();
-            video_face_detection();
         }
     });
 }
