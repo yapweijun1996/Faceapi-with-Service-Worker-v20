@@ -60,11 +60,11 @@ function isCaptureQualityHigh(detection) {
 // --- Drawing Functions ---
 
 function drawAllFaces(detectionsArray) {
-    console.log('[drawAllFaces] Drawing detections:', detectionsArray);
     if (!Array.isArray(detectionsArray) || detectionsArray.length === 0) {
         clearAllCanvases();
         return;
     }
+    console.log(`[drawAllFaces] Drawing ${detectionsArray.length} detection(s).`);
     const canvas = document.getElementById(config.canvas.overlay);
     const video = document.getElementById(config.video.id);
     if (!canvas || !video) return;
@@ -190,22 +190,28 @@ function faceApiRegister(descriptor) {
  * @param {object} data - Detection result from worker.
  */
 export function handleDetectionResult(data) {
-    console.log('[handleDetectionResult] Received data:', data);
-    const dets = data.detections[0];
-    const imageDataForFrame = data.detections[1] && data.detections[1][0];
+    const dets = (data && data.detections && data.detections[0]) ? data.detections[0] : [];
+    const imageDataForFrame = (data && data.detections && data.detections[1]) ? data.detections[1][0] : null;
+
+    // Always draw the detections we received for this frame.
+    drawAllFaces(dets);
 
     // Registration flow
     if (state.faceapiAction === "register") {
         state.registration.lastFaceImageData = imageDataForFrame;
-        drawAllFaces(Array.isArray(dets) ? dets : []);
+        console.log(`[Register Flow] Received ${dets.length} detections.`);
 
-        if (!Array.isArray(dets) || dets.length === 0) {
+        if (dets.length === 0) {
             showMessage("error", "No face detected. Make sure your face is fully visible and well lit.");
         } else if (dets.length > 1) {
             showMessage('error', 'Multiple faces detected. Please ensure only your face is visible.');
         } else {
             // Exactly one face detected, check its quality.
             const detection = dets[0];
+            if (!detection.detection || !detection.alignedRect) {
+                console.error("Invalid detection object received:", detection);
+                return;
+            }
             const quality = {
                 score: detection.detection._score,
                 area: detection.alignedRect._box._width * detection.alignedRect._box._height,
