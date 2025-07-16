@@ -68,43 +68,65 @@ function drawAllFaces(detectionsArray) {
     const video = document.getElementById(config.video.id);
     if (!canvas || !video) return;
 
-    // Use the video's display size for overlay
+    // Ensure video metadata is loaded
+    if (!video.videoWidth || !video.videoHeight) return;
+
+    // Match canvas display size to video element's display size
     const displayWidth = video.clientWidth;
     const displayHeight = video.clientHeight;
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
+    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
+    }
     canvas.style.display = 'block';
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // The detection coordinates are based on the model input (video.videoWidth/video.videoHeight)
-    // We need to scale them to the display size (clientWidth/clientHeight)
-    const scaleX = displayWidth / video.videoWidth;
-    const scaleY = displayHeight / video.videoHeight;
+    // Calculate the scaling factor and offset to handle "letterboxing"
+    // This ensures the overlay aligns with the video content, respecting aspect ratio
+    const videoAspectRatio = video.videoWidth / video.videoHeight;
+    const canvasAspectRatio = canvas.width / canvas.height;
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (videoAspectRatio > canvasAspectRatio) {
+        // Video is wider than canvas, so it's letterboxed vertically
+        scale = canvas.width / video.videoWidth;
+        offsetY = (canvas.height - video.videoHeight * scale) / 2;
+    } else {
+        // Video is taller than canvas, so it's letterboxed horizontally
+        scale = canvas.height / video.videoHeight;
+        offsetX = (canvas.width - video.videoWidth * scale) / 2;
+    }
 
     detectionsArray.forEach((det) => {
-        // Draw bounding box
+        // Draw bounding box, scaled and offset correctly
         if (config.features.showFaceBox && det.alignedRect && det.alignedRect._box) {
             const box = det.alignedRect._box;
             ctx.save();
             ctx.strokeStyle = 'lime';
             ctx.lineWidth = 2;
             ctx.strokeRect(
-                box._x * scaleX,
-                box._y * scaleY,
-                box._width * scaleX,
-                box._height * scaleY
+                box._x * scale + offsetX,
+                box._y * scale + offsetY,
+                box._width * scale,
+                box._height * scale
             );
             ctx.restore();
         }
-        // Draw landmarks
+        // Draw landmarks, scaled and offset correctly
         if (config.features.showLandmarks && det.landmarks && det.landmarks._positions) {
             ctx.save();
             ctx.fillStyle = 'red';
             det.landmarks._positions.forEach(pt => {
                 ctx.beginPath();
-                ctx.arc(pt._x * scaleX, pt._y * scaleY, 2, 0, 2 * Math.PI);
+                ctx.arc(
+                    pt._x * scale + offsetX,
+                    pt._y * scale + offsetY,
+                    2, 0, 2 * Math.PI
+                );
                 ctx.fill();
             });
             ctx.restore();
@@ -174,20 +196,26 @@ export function handleDetectionResult(data) {
     if (state.faceapiAction === "register") {
         state.registration.lastFaceImageData = imageDataForFrame;
         drawAllFaces(Array.isArray(dets) ? dets : []);
-        if (Array.isArray(dets) && dets.length > 0) {
-            if (dets.length !== 1) {
-                showMessage('error', 'Multiple faces detected. Please ensure only your face is visible.');
-            } else {
-                const descriptor = dets[0].descriptor;
-                if (!isCaptureQualityHigh(dets[0])) {
-                    showMessage('error', 'Low-quality capture. Ensure good lighting and face the camera.');
-                } else {
-                    showMessage('success', 'Face capture accepted.');
-                    faceApiRegister(descriptor);
-                }
-            }
-        } else {
+
+        if (!Array.isArray(dets) || dets.length === 0) {
             showMessage("error", "No face detected. Make sure your face is fully visible and well lit.");
+        } else if (dets.length > 1) {
+            showMessage('error', 'Multiple faces detected. Please ensure only your face is visible.');
+        } else {
+            // Exactly one face detected, check its quality.
+            const detection = dets[0];
+            const quality = {
+                score: detection.detection._score,
+                area: detection.alignedRect._box._width * detection.alignedRect._box._height,
+            };
+            console.log(`Detection quality: score=${quality.score.toFixed(3)}, area=${quality.area.toFixed(0)}`);
+
+            if (isCaptureQualityHigh(detection)) {
+                showMessage('success', 'Face capture accepted.');
+                faceApiRegister(detection.descriptor);
+            } else {
+                showMessage('error', 'Low-quality capture. Move closer or improve lighting.');
+            }
         }
     }
 
