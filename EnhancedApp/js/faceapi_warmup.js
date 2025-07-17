@@ -86,6 +86,7 @@ var flatRegisteredDescriptors = [];
 var flatRegisteredUserMeta = [];
 var lastLoadedVerificationJson = '';
 var verificationResults = [];
+var healthCheckResolver = null;
 // Flag to allow multiple face detection ("y" = allow multiple, else single)
 var multiple_face_detection_yn = "y";
 
@@ -1428,6 +1429,12 @@ function handleWorkerMessage(event) {
                 hideLoadingOverlay();
             }
             break;
+        case 'PONG':
+            if (healthCheckResolver) {
+                healthCheckResolver.resolve("ok");
+                healthCheckResolver = null;
+            }
+            break;
         default:
             log.warn(`[Worker] Received unknown message type: ${event.data.type}`);
     }
@@ -1616,31 +1623,39 @@ async function checkWorkerHealth() {
         return Promise.reject("No worker");
     }
 
+    // Prevent overlapping health checks
+    if (healthCheckResolver) {
+        log.warn("Health check already in progress.");
+        return Promise.reject("in-progress");
+    }
+
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
+            healthCheckResolver = null; // Clean up resolver on timeout
             reject("timeout");
         }, 2000);
 
-        const healthCheckHandler = (event) => {
-            if (event.data.type === 'PONG') {
+        // Store the resolver functions to be called by the main message handler
+        healthCheckResolver = {
+            resolve: (value) => {
                 clearTimeout(timeout);
-                // Use a temporary handler that removes itself
-                navigator.serviceWorker.removeEventListener('message', healthCheckHandler);
-                if (worker && typeof worker.removeEventListener === 'function') {
-                    worker.removeEventListener('message', healthCheckHandler);
-                }
-                resolve("ok");
+                resolve(value);
+            },
+            reject: (reason) => {
+                clearTimeout(timeout);
+                reject(reason);
             }
         };
 
+        // Send the PING
         if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.addEventListener('message', healthCheckHandler);
             navigator.serviceWorker.controller.postMessage({ type: 'PING' });
         } else if (worker && typeof worker.postMessage === 'function') {
-            worker.addEventListener('message', healthCheckHandler);
             worker.postMessage({ type: 'PING' });
         } else {
+            // If we can't send a ping, fail immediately
             clearTimeout(timeout);
+            healthCheckResolver = null;
             reject("No worker to ping");
         }
     });
@@ -1653,6 +1668,10 @@ document.addEventListener('visibilitychange', async () => {
             await checkWorkerHealth();
             log.info("Worker is healthy.");
         } catch (error) {
+            if (error === 'in-progress') {
+                log.info("Health check skipped, one is already running.");
+                return;
+            }
             log.warn(`Worker health check failed (${error}). Re-initializing Face API...`);
             isWorkerReady = false;
             isFaceApiReady = false;
