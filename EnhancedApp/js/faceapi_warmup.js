@@ -87,6 +87,7 @@ var flatRegisteredUserMeta = [];
 var lastLoadedVerificationJson = '';
 var verificationResults = [];
 var healthCheckResolver = null;
+var faceMatcher = null;
 // Flag to allow multiple face detection ("y" = allow multiple, else single)
 var multiple_face_detection_yn = "y";
 
@@ -201,6 +202,29 @@ async function getAllUsers() {
         request.onsuccess = (event) => resolve(event.target.result);
         request.onerror = (event) => reject('Error getting all users: ' + event.target.error);
     });
+}
+
+function initializeFaceMatcher(users) {
+    if (users && users.length > 0) {
+        const labeledDescriptors = users.map(user => {
+            // Use the more robust mean descriptor for matching, which is the last one.
+            const meanDescriptor = user.descriptors[user.descriptors.length - 1];
+            return new faceapi.LabeledFaceDescriptors(
+                user.id, // Use user ID as the label for precise identification
+                [new Float32Array(meanDescriptor)]
+            );
+        }).filter(ld => ld.descriptors.length > 0); // Filter out users with no descriptors
+
+        if (labeledDescriptors.length > 0) {
+            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, vle_distance_rate);
+            log.info(`FaceMatcher initialized with ${labeledDescriptors.length} users.`);
+        } else {
+            faceMatcher = null;
+            log.warn("FaceMatcher could not be initialized, no valid user descriptors found.");
+        }
+    } else {
+        faceMatcher = null;
+    }
 }
 
 async function deleteUser(userId) {
@@ -444,6 +468,10 @@ function restartVerification() {
 	verificationResults = registeredUsers.map(u => ({ id: u.id, name: u.name, verified: false }));
 	updateVerificationResultTextarea();
 	updateVerifyProgress();
+
+    // Re-initialize the faceMatcher with all registered users
+    initializeFaceMatcher(registeredUsers);
+
 	faceapi_action = 'verify';
 	camera_start().then(() => {
 		if (!videoDetectionStep) {
@@ -754,6 +782,7 @@ async function load_face_descriptor_json(warmupFaceDescriptorJson, merge = false
 			} else {
 				registeredUsers = (registeredUsers || []).concat(data);
 			}
+            initializeFaceMatcher(registeredUsers);
 			flatRegisteredDescriptors = [];
 			flatRegisteredUserMeta = [];
 			registeredUsers.forEach(user => {
@@ -1265,72 +1294,62 @@ var vle_distance_rate = 0.3;
 * more false negatives). 0.3 is a commonly used starting point that works
 * well in good lighting conditions. Adjust empirically for your setup.
 */
-async function faceapi_verify(descriptor, imageData){
-	if (descriptor && !verificationCompleted) {
-		let matchFound = false;
-		let distance;
-		let matchedIndex = -1;
-		
-		for (let i = 0; i < registeredDescriptors.length; i++) {
-			if (descriptor.length === registeredDescriptors[i].length) {
-				distance = faceapi.euclideanDistance(descriptor, registeredDescriptors[i]);
-				if (distance < vle_distance_rate) {
-					matchFound = true;
-					matchedIndex = i;
-					break;
-				}
-			}
-		}
-		
-		if (matchFound) {
-			const userMeta = flatRegisteredUserMeta[matchedIndex] || { name: 'Unknown', id: 'Unknown' };
-			const uid = userMeta.id;
-			if (uid && !verifiedUserIds.has(uid)) {
-				verifiedUserIds.add(uid);
-				verifiedCount++;
+async function faceapi_verify(descriptor, imageData) {
+    if (descriptor && !verificationCompleted && faceMatcher) {
+        const bestMatch = faceMatcher.findBestMatch(descriptor);
+        const uid = bestMatch.label;
 
-				const metadata = await getDeviceMetadata();
-				const capturedImage = captureAndSaveVerifiedUserImage(imageData, metadata);
+        // Check if the match is valid (not 'unknown') and not already verified
+        if (uid && uid !== 'unknown' && !verifiedUserIds.has(uid)) {
+            verifiedUserIds.add(uid);
+            verifiedCount++;
 
-				const li = document.querySelector(`#verifyPersonList li[data-user-id="${uid}"]`);
-				if (li) {
-					const status = li.querySelector('.status');
-					if (status) status.textContent = 'verified';
-					li.classList.add('verified');
-				}
-				verificationResults = verificationResults.map(r => {
-					if (r.id === uid) {
-						return { ...r, verified: true, capturedImage, 
-							utcTime: metadata.utcTime,
-							timeZone: metadata.timeZone,
-							timeZoneOffset: metadata.timeZoneOffset,
-							deviceName: metadata.deviceName,
-							deviceModel: metadata.deviceModel,
-							deviceUserAgent: metadata.deviceUserAgent
-						};
-					}
-					return r;
-				});
-				updateVerificationResultTextarea();
-				updateVerifyProgress();
-				showVerifyToast(`${userMeta.name} (${userMeta.id}) detected`);
-				if (verifiedCount >= totalVerifyFaces) {
-					camera_stop();
-					verificationCompleted = true;
-					faceapi_action = null;
-					if (typeof showVerifyCompleteOverlay === 'function') showVerifyCompleteOverlay();
-					clear_all_canvases();
-				}
-			}
-			if (multiple_face_detection_yn !== "y") {
-				log.info(`Face Verified: ${userMeta.name} (${userMeta.id}), distance: ${distance.toFixed(3)}`);
-			} else {
-				log.debug(`Face Detected: ${userMeta.name} (${userMeta.id}), distance: ${distance.toFixed(3)}`);
-			}
-		} else {
-			log.debug('No matching face found in verification check.');
-		}
-	}
+            const userMeta = registeredUsers.find(u => u.id === uid);
+            const metadata = await getDeviceMetadata();
+            const capturedImage = captureAndSaveVerifiedUserImage(imageData, metadata);
+
+            // Update UI
+            const li = document.querySelector(`#verifyPersonList li[data-user-id="${uid}"]`);
+            if (li) {
+                li.classList.add('verified');
+                const status = li.querySelector('.status');
+                if (status) status.textContent = 'verified';
+            }
+            
+            // Update results object
+            verificationResults = verificationResults.map(r => 
+                r.id === uid ? { ...r, verified: true, capturedImage, ...metadata } : r
+            );
+            updateVerificationResultTextarea();
+            updateVerifyProgress();
+            showVerifyToast(`${userMeta.name} (${userMeta.id}) detected`);
+
+            // --- OPTIMIZATION ---
+            // Rebuild the FaceMatcher to exclude the newly verified user,
+            // so we don't waste time checking for them in subsequent frames.
+            const remainingLabels = faceMatcher.labeledDescriptors.filter(ld => ld.label !== uid);
+            if (remainingLabels.length > 0) {
+                faceMatcher = new faceapi.FaceMatcher(remainingLabels, vle_distance_rate);
+                log.debug(`User ${uid} verified. Rebuilding matcher with ${remainingLabels.length} users remaining.`);
+            } else {
+                // All users have been verified
+                faceMatcher = null; 
+                log.info("All users have been verified.");
+            }
+            // --- END OPTIMIZATION ---
+
+            // Check for overall completion
+            if (verifiedCount >= totalVerifyFaces) {
+                camera_stop();
+                verificationCompleted = true;
+                faceapi_action = null;
+                if (typeof showVerifyCompleteOverlay === 'function') showVerifyCompleteOverlay();
+                clear_all_canvases();
+            }
+        } else if (uid === 'unknown') {
+            log.debug(`No matching face found. Best match was 'unknown' with distance ${bestMatch.distance.toFixed(3)}`);
+        }
+    }
 }
 
 function handleWorkerMessage(event) {
@@ -1744,6 +1763,46 @@ document.addEventListener("DOMContentLoaded", async function(event) {
             log.error("Failed to initialize Face API for the page:", error);
             // Optionally, show an error message to the user
         }
+    }
+    
+    if (window.location.pathname.endsWith('face_verify.html')) {
+        await initDB();
+        const users = await getAllUsers();
+        registeredUsers = users;
+        initializeFaceMatcher(users);
+        
+        const listEl = document.getElementById('verifyPersonList');
+        if (listEl) {
+            listEl.innerHTML = '';
+            registeredUsers.forEach(u => {
+                const li = document.createElement('li');
+                li.dataset.userId = u.id;
+                const name = u.name || 'Unknown';
+                li.innerHTML = `${name} (${u.id}) – <span class="status">pending</span>`;
+                listEl.appendChild(li);
+            });
+        }
+
+        verificationResults = registeredUsers.map(u => ({
+            id: u.id,
+            name: u.name,
+            verified: false,
+            capturedImage: null,
+            utcTime: null,
+            timeZone: null,
+            timeZoneOffset: null,
+            gps: null,
+            device: null,
+            deviceName: null,
+            deviceModel: null,
+            deviceUserAgent: null
+        }));
+        updateVerificationResultTextarea();
+
+        totalVerifyFaces = registeredUsers.length;
+        verifiedCount = 0;
+        verifiedUserIds = new Set();
+        updateVerifyProgress();
     }
 
 	clearProgress();
