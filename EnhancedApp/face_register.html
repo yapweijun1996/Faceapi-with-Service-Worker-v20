@@ -543,6 +543,35 @@
 			
 			window.addEventListener('orientationchange', checkOrientation);
 			window.addEventListener('resize', checkOrientation);
+
+			document.addEventListener('DOMContentLoaded', () => {
+				const container = document.getElementById('progressContainer');
+				const video = document.getElementById('video');
+				const modal = document.getElementById('imageModal');
+				container.addEventListener('click', (e) => {
+					if (e.target.id === 'startBtn' || e.target.classList.contains('capture-thumb')) return;
+					container.classList.toggle('expanded');
+					if (container.classList.contains('expanded')) {
+						video.pause();
+						if (typeof pauseRegistrationTimer === 'function') pauseRegistrationTimer();
+					} else {
+						video.play();
+						if (typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
+					}
+					e.stopPropagation();
+				});
+				document.addEventListener('click', (e) => {
+					if (modal && modal.style.display === 'flex') return;
+					if (!container.contains(e.target)) {
+						const wasExpanded = container.classList.contains('expanded');
+						container.classList.remove('expanded');
+						if (wasExpanded) {
+							video.play();
+							if (typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
+						}
+					}
+				});
+			});
 		</script>
 		
 		<div class="face-detection-container"  style="display:none;gap:1rem;flex-wrap:wrap;justify-content:center;">
