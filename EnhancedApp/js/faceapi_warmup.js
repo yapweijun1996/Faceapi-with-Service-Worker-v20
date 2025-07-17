@@ -1758,6 +1758,7 @@ document.addEventListener("DOMContentLoaded", async function(event) {
             document.getElementById('registrationForm').style.display = 'none';
             document.getElementById('captureProgress').style.display = 'block';
             document.querySelector('.face-detection-container').style.display = 'flex';
+            document.getElementById('progressContainer').classList.remove('expanded');
             
             // Start the camera and detection
             camera_start();
