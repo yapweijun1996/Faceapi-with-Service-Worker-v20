@@ -1343,6 +1343,14 @@ function handleWorkerMessage(event) {
             faceapi_warmup();
             break;
         case 'DETECTION_RESULT':
+            if (!event.data.data || !event.data.data.detections) {
+                log.warn('[Worker] Received DETECTION_RESULT without detections data. Skipping frame.');
+                isDetectingFrame = false;
+                if (typeof videoDetectionStep === 'function') {
+                    requestAnimationFrame(videoDetectionStep);
+                }
+                break;
+            }
             const dets = event.data.data.detections[0];
             const imageDataForFrame = event.data.data.detections[1] && event.data.data.detections[1][0];
             lastFaceImageData = imageDataForFrame;
