@@ -109,10 +109,10 @@ self.onmessage = async (event) => {
         
         await faceapi.detectAllFaces(warmupCanvas, faceDetectorOptions);
         console.log('WebWorker: Warmup detection successful.');
-        self.postMessage({ type: 'WARMUP_RESULT' });
+        self.postMessage({ type: 'WARMUP_RESULT', success: true });
       } catch (error) {
         console.error('WebWorker: Warmup with image failed:', error);
-        self.postMessage({ type: 'WARMUP_FAILED', error: error.message });
+        self.postMessage({ type: 'WARMUP_RESULT', success: false, error: error.message });
       }
       break;
     }

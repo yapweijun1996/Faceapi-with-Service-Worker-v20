@@ -46,6 +46,9 @@ let resolveFaceApiReady;
 faceApiReadyPromise = new Promise(resolve => {
     resolveFaceApiReady = resolve;
 });
+let warmupPromise;
+let resolveWarmupPromise;
+let rejectWarmupPromise;
 let worker = '';
 const serviceWorkerFileName = 'faceDetectionServiceWorker.js';
 const serviceWorkerFilePath = './js/faceDetectionServiceWorker.js';
@@ -1209,6 +1212,13 @@ function handleWorkerMessage(event) {
             // The new warmup process will handle setting isFaceApiReady.
             faceapi_warmup();
             break;
+        case 'WARMUP_RESULT':
+            if (event.data.success) {
+                if (resolveWarmupPromise) resolveWarmupPromise();
+            } else {
+                if (rejectWarmupPromise) rejectWarmupPromise(new Error(event.data.error));
+            }
+            break;
         case 'DETECTION_RESULT':
             const dets = event.data.data.detections[0];
             const imageDataForFrame = event.data.data.detections[1] && event.data.data.detections[1][0];
@@ -1363,21 +1373,16 @@ async function faceapi_warmup() {
     isWarmingUp = true;
     updateModelStatus('Warming up: Verifying models with static image...');
 
-    const warmupDetectionPromise = new Promise((resolve, reject) => {
-        const warmupTimeout = setTimeout(() => {
-            reject(new Error('Warmup timed out. Worker did not respond.'));
-        }, 10000); // 10-second timeout
-
-        const onMessage = (event) => {
-            if (event.data.type === 'WARMUP_RESULT') {
-                clearTimeout(warmupTimeout);
-                navigator.serviceWorker.removeEventListener('message', onMessage);
-                resolve();
-            }
-        };
-
-        navigator.serviceWorker.addEventListener('message', onMessage);
+    // Create a new promise for this warmup attempt
+    warmupPromise = new Promise((resolve, reject) => {
+        resolveWarmupPromise = resolve;
+        rejectWarmupPromise = reject;
     });
+
+    // Add a timeout
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Warmup timed out. Worker did not respond.')), 10000)
+    );
 
     // Trigger a dummy detection using a static image
     if (worker) {
@@ -1390,7 +1395,9 @@ async function faceapi_warmup() {
     }
 
     try {
-        await warmupDetectionPromise;
+        // Race the warmup against the timeout
+        await Promise.race([warmupPromise, timeoutPromise]);
+
         console.log('Warmup complete: Models loaded and verified with a static image.');
         updateModelStatus('Ready.');
         isFaceApiReady = true;
@@ -1402,6 +1409,9 @@ async function faceapi_warmup() {
         updateModelStatus('Warmup failed. Please reload.', true);
     } finally {
         isWarmingUp = false;
+        // Clean up promise handlers
+        resolveWarmupPromise = null;
+        rejectWarmupPromise = null;
     }
 }
 

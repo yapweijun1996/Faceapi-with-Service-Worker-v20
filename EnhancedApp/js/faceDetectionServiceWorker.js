@@ -129,11 +129,11 @@ self.addEventListener('message', async function(event) {
         
         await faceapi.detectAllFaces(warmupCanvas, face_for_loading_options);
         console.log('Worker: Warmup detection successful.');
-        postToAllClients({ type: 'WARMUP_RESULT' });
+        postToAllClients({ type: 'WARMUP_RESULT', success: true });
       } catch (error) {
         console.error('Worker: Warmup with image failed:', error);
         // Optionally, notify the client of the failure
-        postToAllClients({ type: 'WARMUP_FAILED', error: error.message });
+        postToAllClients({ type: 'WARMUP_RESULT', success: false, error: error.message });
       }
       break;
     default:
