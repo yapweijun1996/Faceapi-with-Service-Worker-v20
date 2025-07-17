@@ -87,10 +87,15 @@ self.onmessage = async (event) => {
       break;
     }
     case 'WARMUP_FACES': {
-      // Create a dummy canvas for warmup
-      const warmupCanvas = new OffscreenCanvas(1, 1);
-      await faceapi.detectAllFaces(warmupCanvas, faceDetectorOptions);
-      self.postMessage({ type: 'WARMUP_RESULT' });
+      try {
+        // Create a dummy canvas for warmup
+        const warmupCanvas = new OffscreenCanvas(1, 1);
+        await faceapi.detectAllFaces(warmupCanvas, faceDetectorOptions);
+        self.postMessage({ type: 'WARMUP_RESULT', success: true });
+      } catch (error) {
+        console.error('WebWorker: Warmup with dummy canvas failed:', error);
+        self.postMessage({ type: 'WARMUP_RESULT', success: false, error: error.message });
+      }
       break;
     }
     case 'WARMUP_WITH_IMAGE': {

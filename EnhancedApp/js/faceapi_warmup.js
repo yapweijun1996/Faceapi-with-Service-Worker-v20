@@ -1269,6 +1269,10 @@ function handleWorkerMessage(event) {
                 requestAnimationFrame(videoDetectionStep);
             }
             break;
+        case 'WARMUP_RESULT':
+            // This is handled by a dedicated listener during the warmup phase.
+            // We can ignore it here to avoid "Unknown message" logs.
+            break;
         default:
             console.log('Unknown message type from worker:', event.data.type);
     }
