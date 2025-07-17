@@ -93,6 +93,29 @@ self.onmessage = async (event) => {
       self.postMessage({ type: 'WARMUP_RESULT' });
       break;
     }
+    case 'WARMUP_WITH_IMAGE': {
+      try {
+        console.log('WebWorker: Starting warmup with static image...');
+        const response = await fetch('../models/face_for_loading.png');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch warmup image: ${response.statusText}`);
+        }
+        const imageBlob = await response.blob();
+        const imageBitmap = await createImageBitmap(imageBlob);
+
+        const warmupCanvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
+        const ctx = warmupCanvas.getContext('2d');
+        ctx.drawImage(imageBitmap, 0, 0);
+        
+        await faceapi.detectAllFaces(warmupCanvas, faceDetectorOptions);
+        console.log('WebWorker: Warmup detection successful.');
+        self.postMessage({ type: 'WARMUP_RESULT' });
+      } catch (error) {
+        console.error('WebWorker: Warmup with image failed:', error);
+        self.postMessage({ type: 'WARMUP_FAILED', error: error.message });
+      }
+      break;
+    }
     default:
       console.warn('WebWorker: Unknown message type:', type);
   }

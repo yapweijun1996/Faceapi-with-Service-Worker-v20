@@ -107,8 +107,11 @@ Based on user feedback, the following issues have been identified and will be ad
     *   **Problem**: On mobile devices, the face detection overlays (bounding box, landmarks) are misaligned with the video feed.
     *   **Solution**: Implement a responsive canvas solution. A `ResizeObserver` will be added to monitor the video element's dimensions. When the video size changes, the canvas overlays will be resized programmatically, and the drawing coordinates will be scaled to ensure they remain perfectly aligned.
 
-3.  **Incomplete Warm-up Definition**:
-    *   **Problem**: The application considers itself "warmed up" as soon as the models are loaded, which is before the camera is confirmed to be working and a face has been detected.
-    *   **Solution**: Redefine the "ready" state. The application will now only be considered fully warmed up after the models are loaded, the camera is successfully activated, and the first face has been detected from the video stream. The UI will reflect this by showing a loading indicator until all these steps are complete.
+3.  **Refined Warm-up Logic**:
+    *   **Problem**: The previous warm-up logic required camera access immediately on page load to perform a test detection. This is not ideal for user experience, as it requests permissions before the user has initiated an action.
+    *   **Solution**: The warm-up process will be changed to use a static `.png` image for the initial detection. This verifies that the models are loaded and functional without needing to access the camera. The camera will now only be activated when the user explicitly starts a registration or verification process. This makes the initial load faster and less intrusive.
+    *   **Implementation**:
+        *   The `faceapi_warmup` function in `faceapi_warmup.js` will be modified to trigger an image-based detection in the worker.
+        *   The worker scripts (`faceDetectionServiceWorker.js` and `faceDetectionWebWorker.js`) will be updated to handle this new warm-up task, load the static image, and perform the detection.
 
 This plan provides a clear path to building a high-performance, robust, and user-friendly face recognition application.

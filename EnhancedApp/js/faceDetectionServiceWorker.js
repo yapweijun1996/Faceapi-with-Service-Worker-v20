@@ -107,6 +107,30 @@ self.addEventListener('message', async function(event) {
       await faceapi.detectAllFaces(warmupCanvas, face_for_loading_options);
       client.postMessage({ type: 'WARMUP_RESULT' });
       break;
+    case 'WARMUP_WITH_IMAGE':
+      try {
+        console.log('Worker: Starting warmup with static image...');
+        const response = await fetch('../models/face_for_loading.png');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch warmup image: ${response.statusText}`);
+        }
+        const imageBlob = await response.blob();
+        const imageBitmap = await createImageBitmap(imageBlob);
+
+        // Use the image bitmap to perform a detection
+        const warmupCanvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
+        const ctx = warmupCanvas.getContext('2d');
+        ctx.drawImage(imageBitmap, 0, 0);
+        
+        await faceapi.detectAllFaces(warmupCanvas, face_for_loading_options);
+        console.log('Worker: Warmup detection successful.');
+        client.postMessage({ type: 'WARMUP_RESULT' });
+      } catch (error) {
+        console.error('Worker: Warmup with image failed:', error);
+        // Optionally, notify the client of the failure
+        client.postMessage({ type: 'WARMUP_FAILED', error: error.message });
+      }
+      break;
     default:
       console.log('Unknown message type:', type);
   }

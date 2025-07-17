@@ -1363,40 +1363,53 @@ async function load_model() {
  * faceApiReadyPromise.
  */
 async function faceapi_warmup() {
-    updateModelStatus('Warming up: Activating camera...');
-    await camera_start();
+    updateModelStatus('Warming up: Verifying models with static image...');
 
-    // We need to wait for the first successful detection.
-    // We'll create a new promise that resolves when the WARMUP_RESULT is received.
-    const warmupDetectionPromise = new Promise(resolve => {
+    // We need to wait for the first successful detection using a static image.
+    // This confirms the model is functional without requiring immediate camera access.
+    const warmupDetectionPromise = new Promise((resolve, reject) => {
         const originalHandler = handleWorkerMessage;
+
+        // Create a timeout for the warmup process
+        const warmupTimeout = setTimeout(() => {
+            console.error('Warmup timed out. Worker did not respond.');
+            updateModelStatus('Warmup failed. Please reload.', true);
+            handleWorkerMessage = originalHandler; // Restore handler
+            reject(new Error('Warmup timed out'));
+        }, 10000); // 10-second timeout
+
         handleWorkerMessage = (event) => {
             // We still want the original handler to process other messages
             originalHandler(event);
             if (event.data.type === 'WARMUP_RESULT') {
-                // Restore the original handler and resolve our promise
-                handleWorkerMessage = originalHandler;
+                clearTimeout(warmupTimeout); // Clear the timeout on success
+                handleWorkerMessage = originalHandler; // Restore the original handler
                 resolve();
             }
         };
     });
 
-    // Trigger a dummy detection
+    // Trigger a dummy detection using a static image
     if (worker) {
-        worker.postMessage({ type: 'WARMUP_FACES' });
+        worker.postMessage({ type: 'WARMUP_WITH_IMAGE' });
+    } else {
+        console.error("Worker not available for warmup.");
+        updateModelStatus('Initialization error.', true);
+        return;
     }
 
-    updateModelStatus('Warming up: Awaiting first detection...');
-    await warmupDetectionPromise;
-
-    console.log('Warmup complete: Models loaded, camera active, and first detection successful.');
-    updateModelStatus('Ready.');
-    isFaceApiReady = true;
-    if (typeof resolveFaceApiReady === 'function') {
-        resolveFaceApiReady();
+    try {
+        await warmupDetectionPromise;
+        console.log('Warmup complete: Models loaded and verified with a static image.');
+        updateModelStatus('Ready.');
+        isFaceApiReady = true;
+        if (typeof resolveFaceApiReady === 'function') {
+            resolveFaceApiReady();
+        }
+    } catch (error) {
+        console.error('Face API warmup failed:', error);
+        // The status is already updated by the timeout handler
     }
-    // Stop the camera after warmup to save resources
-    camera_stop();
 }
 
 /**
