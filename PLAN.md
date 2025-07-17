@@ -114,4 +114,8 @@ Based on user feedback, the following issues have been identified and will be ad
         *   The `faceapi_warmup` function in `faceapi_warmup.js` will be modified to trigger an image-based detection in the worker.
         *   The worker scripts (`faceDetectionServiceWorker.js` and `faceDetectionWebWorker.js`) will be updated to handle this new warm-up task, load the static image, and perform the detection.
 
+4.  **Service Worker Initialization Hang**:
+    *   **Problem**: The application hangs after logging "Attempting to initialize Service Worker..." because the worker script fails silently.
+    *   **Solution**: The Service Worker script was patched to use `self.clients.matchAll()` for broadcasting messages, as `event.source` was `null` during the initial load, causing a fatal error. This ensures reliable communication and prevents the worker from hanging.
+
 This plan provides a clear path to building a high-performance, robust, and user-friendly face recognition application.

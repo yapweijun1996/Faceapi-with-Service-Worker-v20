@@ -1447,17 +1447,26 @@ async function initializeFaceApi() {
     if (swSupported && offscreenSupported) {
         try {
             console.log("Attempting to initialize Service Worker...");
-            const registration = await navigator.serviceWorker.register(serviceWorkerFilePath, { scope: './js/' });
-            
-            // Wait for the service worker to be active
-            await navigator.serviceWorker.ready;
+            // Use the more robust, existing workerRegistration function
+            const sw = await workerRegistration();
+            if (!sw) {
+                throw new Error("Service Worker registration failed to return an active worker.");
+            }
 
-            worker = registration.active;
+            // The global 'worker' variable is now set by workerRegistration.
+            // Add the message listener.
             navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
             
             console.log("Service Worker is active. Loading models.");
             updateModelStatus('Loading models via Service Worker...');
-            worker.postMessage({ type: 'LOAD_MODELS' });
+
+            // The controller is the safest way to post a message.
+            if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'LOAD_MODELS' });
+            } else {
+                // Fallback to the worker reference if controller is not yet available.
+                sw.postMessage({ type: 'LOAD_MODELS' });
+            }
             isWorkerReady = true;
 
         } catch (error) {
