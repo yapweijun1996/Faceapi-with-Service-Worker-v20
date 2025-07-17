@@ -108,14 +108,18 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: The Web Worker fallback failed with an `OffscreenCanvas` constructor error.
     *   **Solution**: The `triggerImageWarmup` function was fixed to send the correct image `width` and `height` to the worker, resolving the error.
 
+8.  **Worker Initialization Hang on Registration Page**:
+    *   **Problem**: The application would get stuck on the loading screen on `face_register.html` because the worker initialization logic was not robust enough to handle silent failures.
+    *   **Solution**: The `initFaceApi` function was refactored to use a `try...catch` block instead of `Promise.race`, ensuring that any failure in the Service Worker initialization reliably triggers the Web Worker fallback.
+
 ---
 
 ## 6. Future Improvements
 
 The following are potential areas for future development:
 
-*   **Advanced Error Handling**: Implement a more user-friendly error display system to provide clearer feedback on issues like camera permission denial or model loading failures.
-*   **Profile Management**: Create a dedicated page where users can view, rename, or delete their registered profiles.
+*   **Advanced Error Handling (Partially Implemented)**: The worker initialization process now has more robust error handling and fallback mechanisms.
+*   **Profile Management (Implemented)**: A dedicated page (`profile_management.html`) has been created, allowing users to view, rename, and delete their registered profiles from IndexedDB.
 *   **Model Swapping**: Allow users to experiment with different `face-api.js` models (e.g., SSD Mobilenet v1 vs. Tiny Face Detector) to see the trade-offs in performance and accuracy.
 *   **Liveness Detection**: Integrate a simple liveness check (e.g., requiring a head turn or blink) to prevent spoofing with static photos.
 *   **Code Refinement**: Convert the global helper functions in `faceapi_warmup.js` into an ES Module to improve code organization and maintainability.

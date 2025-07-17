@@ -105,8 +105,8 @@
 ## 6. Content Lifecycle
 
 * **Create:** Through registration flow.
-* **Edit:** (Future) Users may be able to rename or update their profiles.
-* **Delete:** (Future) UI for deleting user records.
+* **Edit:** Users can rename their profiles via the Profile Management page.
+* **Delete:** Users can delete their profiles via the Profile Management page.
 * **Retention:** Data remains on device until user clears it/browser storage is wiped.
 * **Versioning:** IndexedDB schema should be forward-compatible for easy upgrades.
 
@@ -143,14 +143,15 @@
 * IndexedDB quota can be low on incognito/private mode.
 * OffscreenCanvas constructor errors (now handled with explicit dims).
 * If local storage is cleared, all registered profiles are lost.
+* **(Fixed)** Worker initialization could hang indefinitely if the Service Worker failed silently. The logic has been updated with a more robust `try...catch` block to ensure a proper fallback to the Web Worker.
 * No liveness/spoofing detection yet (future work).
 
 ---
 
 ## 10. Future Enhancements
 
+* **(Implemented)** Profile management page (view/edit/delete).
 * Friendly error UI for all common browser/camera issues.
-* Profile management page (view/edit/delete).
 * Support for multiple face-api.js models (performance vs. accuracy).
 * Liveness/anti-spoofing (blink/head turn).
 * Full ES Module refactor for all helpers.
