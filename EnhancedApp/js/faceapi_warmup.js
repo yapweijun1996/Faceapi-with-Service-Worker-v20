@@ -186,6 +186,38 @@ async function getAllUsers() {
     });
 }
 
+async function deleteUser(userId) {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readwrite');
+        const store = transaction.objectStore('users');
+        const request = store.delete(userId);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error deleting user: ' + event.target.error);
+    });
+}
+
+async function updateUser(userId, newName) {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readwrite');
+        const store = transaction.objectStore('users');
+        const request = store.get(userId);
+        request.onerror = (event) => reject('Error finding user: ' + event.target.error);
+        request.onsuccess = (event) => {
+            const user = event.target.result;
+            if (user) {
+                user.name = newName;
+                const updateRequest = store.put(user);
+                updateRequest.onsuccess = () => resolve();
+                updateRequest.onerror = (event) => reject('Error updating user: ' + event.target.error);
+            } else {
+                reject('User not found');
+            }
+        };
+    });
+}
+
 // Adjust detection options for low-end devices
 function adjustDetectionForDevice() {
 	try {
