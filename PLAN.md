@@ -89,10 +89,26 @@ The new architecture will be entirely client-side, leveraging modern browser fea
 2.  **Update `face_verify.html`**: Display a dynamic list of registered users.
 3.  **Improve Feedback**: Display the verified user's name next to the bounding box.
 
-### Phase 3: Testing
+### Phase 3: Testing and Debugging
 
 1.  **Test Pre-warming**: Confirm models load on `index.html` and that other pages wait correctly.
 2.  **Test Registration & Verification**: Confirm the full workflows function as designed.
 3.  **Test Persistence**: Confirm data survives a page reload.
+
+### Phase 4: Bug Fixes and Enhancements (Post-Initial Implementation)
+
+Based on user feedback, the following issues have been identified and will be addressed:
+
+1.  **Web Worker Fallback Failure**:
+    *   **Problem**: The application does not reliably fall back to using a Web Worker when the Service Worker fails to initialize.
+    *   **Solution**: Refactor the worker initialization logic in `faceapi_warmup.js` to ensure a robust fallback mechanism. Any error during the Service Worker registration or activation will now correctly trigger the `startWebWorker` function.
+
+2.  **Mobile Viewport Misalignment**:
+    *   **Problem**: On mobile devices, the face detection overlays (bounding box, landmarks) are misaligned with the video feed.
+    *   **Solution**: Implement a responsive canvas solution. A `ResizeObserver` will be added to monitor the video element's dimensions. When the video size changes, the canvas overlays will be resized programmatically, and the drawing coordinates will be scaled to ensure they remain perfectly aligned.
+
+3.  **Incomplete Warm-up Definition**:
+    *   **Problem**: The application considers itself "warmed up" as soon as the models are loaded, which is before the camera is confirmed to be working and a face has been detected.
+    *   **Solution**: Redefine the "ready" state. The application will now only be considered fully warmed up after the models are loaded, the camera is successfully activated, and the first face has been detected from the video stream. The UI will reflect this by showing a loading indicator until all these steps are complete.
 
 This plan provides a clear path to building a high-performance, robust, and user-friendly face recognition application.
