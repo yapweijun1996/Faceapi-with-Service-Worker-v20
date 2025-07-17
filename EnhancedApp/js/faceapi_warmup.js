@@ -402,6 +402,7 @@ function cancelRegistration() {
 	clear_all_canvases();
 	const container = document.querySelector('.face-detection-container');
 	if (container) container.style.display = 'none';
+	window.location.href = 'index.html';
 }
 
 function restartVerification() {
@@ -438,6 +439,7 @@ function cancelVerification() {
 	// Only clear the canvas overlays and stop the camera so the
 	// user can restart verification later if desired.
 	clear_all_canvases();
+	window.location.href = 'index.html';
 }
 
 function populateUserFaceIdTextarea() {
