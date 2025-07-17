@@ -82,7 +82,7 @@ self.onmessage = async (event) => {
       const result = await detectFaces(imageData, width, height);
       self.postMessage({
         type: 'DETECTION_RESULT',
-        data: { detections: result, displaySize: { width, height } }
+        data: { detections: result, displaySize: { width, height } },
       });
       break;
     }

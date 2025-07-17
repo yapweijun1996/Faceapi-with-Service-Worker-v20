@@ -8,7 +8,7 @@ let isModelLoaded = false;
 function postToAllClients(message) {
   self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
     if (!clients || clients.length === 0) {
-      console.log("No clients to post message to.");
+      console.log('No clients to post message to.');
       return;
     }
     clients.forEach(client => {
@@ -40,10 +40,10 @@ async function loadModels() {
 
 async function checkModelsLoaded() {
   if (isModelLoaded) {
-    console.log("checkModelsLoaded : Models are loaded.");
+    console.log('checkModelsLoaded : Models are loaded.');
     postToAllClients({ type: 'MODELS_LOADED' });
   } else {
-    console.log("checkModelsLoaded : Models are not loaded yet.");
+    console.log('checkModelsLoaded : Models are not loaded yet.');
     await loadModels();
   }
 }
@@ -91,7 +91,7 @@ async function detectFaces(imageData, width, height) {
 
 self.addEventListener('message', async function(event) {
   const { type, imageData, width, height, face_detector_options } = event.data;
-  if (typeof face_detector_options === "undefined" || face_detector_options === "undefined") {
+  if (typeof face_detector_options === 'undefined' || face_detector_options === 'undefined') {
     face_for_loading_options = FaceDetectorOptionsDefault;
   } else {
     face_for_loading_options = new faceapi.TinyFaceDetectorOptions(face_detector_options);
