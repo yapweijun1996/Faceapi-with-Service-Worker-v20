@@ -4,6 +4,19 @@ importScripts('face-api.min.js');
 
 let isModelLoaded = false;
 
+// Helper to post messages to all clients
+function postToAllClients(message) {
+  self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
+    if (!clients || clients.length === 0) {
+      console.log("No clients to post message to.");
+      return;
+    }
+    clients.forEach(client => {
+      client.postMessage(message);
+    });
+  });
+}
+
 const FaceDetectorOptionsDefault = new faceapi.TinyFaceDetectorOptions({
   inputSize: 128,
   scoreThreshold: 0.1,
@@ -11,8 +24,8 @@ const FaceDetectorOptionsDefault = new faceapi.TinyFaceDetectorOptions({
 });
 let face_for_loading_options = FaceDetectorOptionsDefault;
 
-async function loadModels(client) {
-  const post = (message) => client.postMessage({ type: 'MODEL_LOADING_PROGRESS', message });
+async function loadModels() {
+  const post = (message) => postToAllClients({ type: 'MODEL_LOADING_PROGRESS', message });
 
   post('Loading face detector...');
   await faceapi.nets.tinyFaceDetector.loadFromUri('../models');
@@ -22,16 +35,16 @@ async function loadModels(client) {
   await faceapi.nets.faceRecognitionNet.loadFromUri('../models');
 
   isModelLoaded = true;
-  client.postMessage({ type: 'MODELS_LOADED' });
+  postToAllClients({ type: 'MODELS_LOADED' });
 }
 
-async function checkModelsLoaded(client) {
+async function checkModelsLoaded() {
   if (isModelLoaded) {
     console.log("checkModelsLoaded : Models are loaded.");
-    client.postMessage({ type: 'MODELS_LOADED' });
+    postToAllClients({ type: 'MODELS_LOADED' });
   } else {
     console.log("checkModelsLoaded : Models are not loaded yet.");
-    await loadModels(client);
+    await loadModels();
   }
 }
 
@@ -77,8 +90,6 @@ async function detectFaces(imageData, width, height) {
 }
 
 self.addEventListener('message', async function(event) {
-  const client = event.source;
-
   const { type, imageData, width, height, face_detector_options } = event.data;
   if (typeof face_detector_options === "undefined" || face_detector_options === "undefined") {
     face_for_loading_options = FaceDetectorOptionsDefault;
@@ -89,11 +100,11 @@ self.addEventListener('message', async function(event) {
   let detections;
   switch (type) {
     case 'LOAD_MODELS':
-      await checkModelsLoaded(client);
+      await checkModelsLoaded();
       break;
     case 'DETECT_FACES':
       detections = await detectFaces(imageData, width, height);
-      client.postMessage({
+      postToAllClients({
         type: 'DETECTION_RESULT',
         data: {
           detections: detections,
@@ -105,7 +116,7 @@ self.addEventListener('message', async function(event) {
       // Create a dummy canvas for warmup
       const warmupCanvas = new OffscreenCanvas(1, 1);
       await faceapi.detectAllFaces(warmupCanvas, face_for_loading_options);
-      client.postMessage({ type: 'WARMUP_RESULT' });
+      postToAllClients({ type: 'WARMUP_RESULT' });
       break;
     case 'WARMUP_WITH_IMAGE':
       try {
@@ -124,11 +135,11 @@ self.addEventListener('message', async function(event) {
         
         await faceapi.detectAllFaces(warmupCanvas, face_for_loading_options);
         console.log('Worker: Warmup detection successful.');
-        client.postMessage({ type: 'WARMUP_RESULT' });
+        postToAllClients({ type: 'WARMUP_RESULT' });
       } catch (error) {
         console.error('Worker: Warmup with image failed:', error);
         // Optionally, notify the client of the failure
-        client.postMessage({ type: 'WARMUP_FAILED', error: error.message });
+        postToAllClients({ type: 'WARMUP_FAILED', error: error.message });
       }
       break;
     default:
