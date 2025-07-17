@@ -20,35 +20,35 @@
 * while the underlying video feed is paused.  Progress is persisted in
 * IndexedDB so a partially completed registration survives a page reload.
 */
-var videoId = 'video';
+const videoId = 'video';
 /**
 * ID of the hidden canvas used for capturing raw video frames for inference.
 * @type {string}
 */
-var canvasId = 'canvas';
-var canvasId2 = 'canvas2';
-var canvasId3 = 'canvas3';
+const canvasId = 'canvas';
+const canvasId2 = 'canvas2';
+const canvasId3 = 'canvas3';
 /**
 * ID of the snapshot canvas used to display the detected face image with confidence percentage.
 * @type {string}
 */
-var canvasOutputId = 'canvas_output';
-var step_fps = 16.67; // 1000 / 16.67 = 60 FPS
-var vle_face_landmark_position_yn = 'y'; // y / n
-var vle_facebox_yn = 'y'; // y / n
+const canvasOutputId = 'canvas_output';
+let step_fps = 16.67; // 1000 / 16.67 = 60 FPS
+let vle_face_landmark_position_yn = 'y'; // y / n
+let vle_facebox_yn = 'y'; // y / n
 
 
-var isWorkerReady = false;
-var isFaceApiReady = false;
-var faceApiReadyPromise;
-var resolveFaceApiReady;
+let isWorkerReady = false;
+let isFaceApiReady = false;
+let faceApiReadyPromise;
+let resolveFaceApiReady;
 faceApiReadyPromise = new Promise(resolve => {
     resolveFaceApiReady = resolve;
 });
-var worker = '';
-var serviceWorkerFileName = 'faceDetectionServiceWorker.js';
-var serviceWorkerFilePath = './js/faceDetectionServiceWorker.js';
-var imgFaceFilePathForWarmup = './models/face_for_loading.png';
+let worker = '';
+const serviceWorkerFileName = 'faceDetectionServiceWorker.js';
+const serviceWorkerFilePath = './js/faceDetectionServiceWorker.js';
+const imgFaceFilePathForWarmup = './models/face_for_loading.png';
 
 if(typeof face_detector_options_setup === 'undefined' || face_detector_options_setup === 'undefined'){
 	var face_detector_options_setup = {
@@ -58,20 +58,20 @@ if(typeof face_detector_options_setup === 'undefined' || face_detector_options_s
 	};
 }
 
-var isDetectingFrame = false;          // Prevent overlapping detection requests
-var videoDetectionStep = null;         // Reference to the next frame callback
+let isDetectingFrame = false;          // Prevent overlapping detection requests
+let videoDetectionStep = null;         // Reference to the next frame callback
 
 // Add user registration support
-var currentUserId = '';
-var currentUserName = '';
-var currentUserDescriptors = [];
-var registeredUsers = [];
-var flatRegisteredDescriptors = [];
-var flatRegisteredUserMeta = [];
-var lastLoadedVerificationJson = '';
-var verificationResults = [];
+let currentUserId = '';
+let currentUserName = '';
+let currentUserDescriptors = [];
+let registeredUsers = [];
+let flatRegisteredDescriptors = [];
+let flatRegisteredUserMeta = [];
+let lastLoadedVerificationJson = '';
+let verificationResults = [];
 // Flag to allow multiple face detection ('y' = allow multiple, else single)
-var multiple_face_detection_yn = 'y';
+let multiple_face_detection_yn = 'y';
 
 // ---------------------------------------------------------------------------
 // IndexedDB Integration for Persistent Storage
@@ -163,13 +163,13 @@ function adjustDetectionForDevice() {
 }
 
 // Similarity filtering settings for registration
-var registrationSimilarityThreshold = 0.15; // minimum Euclidean distance to accept new capture
-var maxRegistrationAttempts = 20;            // maximum attempts per descriptor slot
-var currentRegistrationAttempt = 0;          // attempt counter for current slot
-var bestCandidateDescriptor = null;          // best diverse descriptor seen so far
-var bestCandidateMinDist = 0;                // its distance
+let registrationSimilarityThreshold = 0.15; // minimum Euclidean distance to accept new capture
+const maxRegistrationAttempts = 20;            // maximum attempts per descriptor slot
+let currentRegistrationAttempt = 0;          // attempt counter for current slot
+let bestCandidateDescriptor = null;          // best diverse descriptor seen so far
+let bestCandidateMinDist = 0;                // its distance
 // Track descriptor distances for calibration insight
-var registrationAttemptDistances = [];
+let registrationAttemptDistances = [];
 
 // Add helper functions for improved registration checks and feedback
 const duplicateThreshold = 0.3; // threshold for duplicate across users; local-only
@@ -648,7 +648,7 @@ async function camera_start() {
 
 
 async function camera_stop() {
-	var video = document.getElementById(videoId);
+	const video = document.getElementById(videoId);
 	if (video.srcObject) {
 		const stream = video.srcObject;
 		const tracks = stream.getTracks();
@@ -791,10 +791,10 @@ async function load_face_descriptor_json(warmupFaceDescriptorJson, merge = false
 * Draws the raw frame into the hidden canvas (canvasId) for inference.
 */
 function video_face_detection() {
-	var video = document.getElementById(videoId);
-	var canvas = document.getElementById(canvasId);
+	const video = document.getElementById(videoId);
+	const canvas = document.getElementById(canvasId);
 	canvas.willReadFrequently = true;
-	var context = canvas.getContext('2d');
+	const context = canvas.getContext('2d');
 	context.willReadFrequently = true;
 	
 	video.addEventListener('play', () => {
@@ -871,7 +871,7 @@ async function unregisterAllServiceWorker() {
 */
 async function drawImageDataToCanvas(detections, canvasId) {
 	const canvas = document.getElementById(canvasId);
-	const context = canvas.getContext("2d");
+	const context = canvas.getContext('2d');
 	
 	// Expect [results, imageDataArray]; guard against invalid shapes
 	if (!Array.isArray(detections) || detections.length < 2) {
@@ -1048,15 +1048,15 @@ function clear_all_canvases() {
 	});
 }
 
-var registeredDescriptors = [];
-var maxCaptures = 20;
-var registrationCompleted = false;
-var verificationCompleted = false;
-var totalVerifyFaces = 0;
-var verifiedCount = 0;
-var verifiedUserIds = new Set();
-var capturedFrames = [];
-var lastFaceImageData = null;
+let registeredDescriptors = [];
+const maxCaptures = 20;
+let registrationCompleted = false;
+let verificationCompleted = false;
+let totalVerifyFaces = 0;
+let verifiedCount = 0;
+let verifiedUserIds = new Set();
+let capturedFrames = [];
+let lastFaceImageData = null;
 
 /*
 var registrationStartTime = null;
@@ -1166,7 +1166,7 @@ function faceapi_register(descriptor) {
     }
 }
 
-var vle_distance_rate = 0.3;
+let vle_distance_rate = 0.3;
 
 /**
 * Threshold used by face-api.js Euclidean distance to decide whether two
@@ -1216,9 +1216,9 @@ function handleWorkerMessage(event) {
             drawAllFaces(Array.isArray(dets) ? dets : []);
 
             if (Array.isArray(dets) && dets.length > 0) {
-                if (faceapi_action === "verify") {
+                if (faceapi_action === 'verify') {
                     dets.forEach(d => faceapi_verify(d.descriptor, imageDataForFrame));
-                } else if (faceapi_action === "register") {
+                } else if (faceapi_action === 'register') {
                     if (dets.length !== 1) {
                         if (typeof showMessage === 'function') showMessage('error', 'Multiple faces detected. Please ensure only your face is visible.');
                     } else {
@@ -1237,10 +1237,10 @@ function handleWorkerMessage(event) {
                     }
                 }
             } else {
-                showMessage("error", "No face detected. Make sure your face is fully visible and well lit.");
+                showMessage('error', 'No face detected. Make sure your face is fully visible and well lit.');
             }
 
-            if (typeof vle_face_landmark_position_yn === "string" && vle_face_landmark_position_yn == "y") {
+            if (typeof vle_face_landmark_position_yn === 'string' && vle_face_landmark_position_yn == 'y') {
                 if (Array.isArray(dets) && dets.length > 0 && dets[0]) {
                     draw_face_landmarks(dets[0]);
                 } else {
@@ -1248,7 +1248,7 @@ function handleWorkerMessage(event) {
                 }
             }
 
-            if (multiple_face_detection_yn !== "y" && typeof vle_facebox_yn === "string" && vle_facebox_yn == "y") {
+            if (multiple_face_detection_yn !== 'y' && typeof vle_facebox_yn === 'string' && vle_facebox_yn == 'y') {
                 if (dets && dets.length > 0 && dets[0] && dets[0].alignedRect && dets[0].alignedRect._box) {
                     draw_face_box(canvasId3, dets[0].alignedRect._box, dets[0].detection._score);
                 } else {
@@ -1256,7 +1256,7 @@ function handleWorkerMessage(event) {
                 }
             }
 
-            if (faceapi_action === "register" && Array.isArray(dets) && dets.length > 0 && dets[0]) {
+            if (faceapi_action === 'register' && Array.isArray(dets) && dets.length > 0 && dets[0]) {
                 drawRegistrationOverlay(dets[0]);
             }
 
@@ -1417,19 +1417,19 @@ async function faceapi_warmup() {
  * This is called if the Service Worker fails to initialize.
  */
 async function startWebWorker() {
-    console.log("Service Worker failed. Falling back to Web Worker.");
+    console.log('Service Worker failed. Falling back to Web Worker.');
     updateModelStatus('Using Web Worker fallback...');
 
     if (window.Worker) {
         worker = new Worker('./js/faceDetectionWebWorker.js');
         worker.onmessage = handleWorkerMessage;
         worker.onerror = (error) => {
-            console.error("Web Worker error:", error);
+            console.error('Web Worker error:', error);
             updateModelStatus('Web Worker error.', true);
         };
         worker.postMessage({ type: 'LOAD_MODELS' });
     } else {
-        console.error("Web Workers are not supported in this browser.");
+        console.error('Web Workers are not supported in this browser.');
         updateModelStatus('Face detection not supported.', true);
     }
 }
@@ -1446,18 +1446,18 @@ async function initializeFaceApi() {
 
     if (swSupported && offscreenSupported) {
         try {
-            console.log("Attempting to initialize Service Worker...");
+            console.log('Attempting to initialize Service Worker...');
             // Use the more robust, existing workerRegistration function
             const sw = await workerRegistration();
             if (!sw) {
-                throw new Error("Service Worker registration failed to return an active worker.");
+                throw new Error('Service Worker registration failed to return an active worker.');
             }
 
             // The global 'worker' variable is now set by workerRegistration.
             // Add the message listener.
             navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
             
-            console.log("Service Worker is active. Loading models.");
+            console.log('Service Worker is active. Loading models.');
             updateModelStatus('Loading models via Service Worker...');
 
             // The controller is the safest way to post a message.
@@ -1470,17 +1470,17 @@ async function initializeFaceApi() {
             isWorkerReady = true;
 
         } catch (error) {
-            console.error("Service Worker initialization failed:", error);
+            console.error('Service Worker initialization failed:', error);
             await startWebWorker(); // Fallback to Web Worker
         }
     } else {
-        console.warn("Service Worker or OffscreenCanvas not supported. Using Web Worker fallback.");
+        console.warn('Service Worker or OffscreenCanvas not supported. Using Web Worker fallback.');
         await startWebWorker();
     }
 }
 
 // --- App Initialization ---
-document.addEventListener("DOMContentLoaded", async function(event) {
+document.addEventListener('DOMContentLoaded', async function(event) {
     adjustDetectionForDevice();
     setupCanvasResizeObserver(); // Set up the observer for responsive canvases
     await initializeFaceApi();
