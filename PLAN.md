@@ -121,6 +121,10 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: Users had no direct way to return to the main page from the registration or verification flows, and were not automatically redirected after completion.
     *   **Solution**: The "Cancel" button on both registration and verification pages now redirects the user to `index.html`, providing a clear exit path. The standalone "Go to Index" links were removed to create a cleaner, full-screen UI, especially on mobile devices. Automatic redirection after successful completion remains.
 
+11. **Structured Logging Implementation**:
+    *   **Problem**: The codebase used inconsistent `console.log` statements, making debugging difficult and the console output noisy.
+    *   **Solution**: A simple, structured logging utility was introduced in `faceapi_warmup.js`. It provides distinct levels (`info`, `warn`, `error`, `debug`) and adds prefixes to all messages for clarity. A global `DEBUG_MODE` flag allows developers to easily enable or disable verbose logging, significantly improving the debugging experience.
+
 ---
 
 ## 6. Future Improvements
