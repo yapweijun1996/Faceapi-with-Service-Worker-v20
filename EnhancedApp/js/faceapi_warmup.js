@@ -1601,7 +1601,7 @@ async function startWebWorker() {
 async function initFaceApi() {
     if (isWorkerReady) {
         console.log("Face API already initialized or in progress.");
-        return;
+        return faceApiReadyPromise;
     }
     console.log("Initializing Face API...");
     showLoadingOverlay();
@@ -1610,34 +1610,38 @@ async function initFaceApi() {
     const swSupported = 'serviceWorker' in navigator;
     const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
 
+    // Prefer Service Worker, but have a robust fallback
     if (swSupported && offscreenSupported && !isIOS) {
+        console.log("Attempting to initialize with Service Worker.");
         try {
-            // Add a timeout for Service Worker initialization
-            const swTimeout = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Service Worker initialization timed out')), 15000)
-            );
-            await Promise.race([initWorker(), swTimeout]);
-        } catch (e) {
-            console.warn("Service Worker initialization failed or timed out, falling back to Web Worker", e);
+            await initWorker();
+            console.log("Service Worker initialized successfully.");
+        } catch (error) {
+            console.error("Service Worker initialization failed. Falling back to Web Worker.", error);
             await startWebWorker();
         }
     } else {
-        if (isIOS) {
-            console.warn("iOS detected, forcing Web Worker fallback.");
-        } else {
-            console.warn("Service Worker not supported, using Web Worker fallback.");
-        }
+        let reason = !swSupported ? "ServiceWorker not supported" :
+                     !offscreenSupported ? "OffscreenCanvas not supported" :
+                     "iOS detected";
+        console.warn(`${reason}. Forcing Web Worker fallback.`);
         await startWebWorker();
     }
+    return faceApiReadyPromise;
 }
 
 // Initialize either service worker or fallback to web worker
 document.addEventListener("DOMContentLoaded", async function(event) {
-	// On pages other than index.html, we wait for the promise.
-	// On index.html, initFaceApi is called directly.
-	if (window.location.pathname.endsWith('face_register.html') || window.location.pathname.endsWith('face_verify.html')) {
-        await faceApiReadyPromise;
-        console.log("Face API is ready, proceeding with page setup.");
+    // On pages that need face-api, we call initFaceApi and wait for it to complete.
+    // On index.html, it's called but we don't wait, allowing it to load in the background.
+    if (window.location.pathname.endsWith('face_register.html') || window.location.pathname.endsWith('face_verify.html') || window.location.pathname.endsWith('profile_management.html')) {
+        try {
+            await initFaceApi();
+            console.log("Face API is ready, proceeding with page setup.");
+        } catch (error) {
+            console.error("Failed to initialize Face API for the page:", error);
+            // Optionally, show an error message to the user
+        }
     }
 
 	clearProgress();
