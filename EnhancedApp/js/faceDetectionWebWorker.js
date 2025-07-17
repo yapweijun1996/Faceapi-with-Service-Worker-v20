@@ -94,6 +94,9 @@ self.onmessage = async (event) => {
       });
       break;
     }
+    case 'PING':
+      self.postMessage({ type: 'PONG' });
+      break;
     default:
       console.warn('WebWorker: Unknown message type:', type);
   }

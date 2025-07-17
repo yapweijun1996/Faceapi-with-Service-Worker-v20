@@ -129,6 +129,10 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: On the `face_register.html` page, the camera would not start automatically after the Face API models were loaded and warmed up. The `warmup_completed` callback queue was not being executed.
     *   **Solution**: The `handleWorkerMessage` function in `faceapi_warmup.js` was updated to correctly iterate through and execute the functions in the `warmup_completed` array. A guard was also added to prevent the warmup completion logic from running multiple times, resolving the issue.
 
+13. **Worker Termination on Tab Backgrounding**:
+    *   **Problem**: If the application tab was left in the background, the browser would eventually terminate the worker to conserve resources, causing the app to become unresponsive upon return.
+    *   **Solution**: A re-initialization mechanism was implemented using the Page Visibility API. When the user returns to the tab, a health check (`PING`/`PONG`) is sent to the worker. If the worker doesn't respond, the application automatically re-initializes the Face API, ensuring a seamless user experience.
+
 ---
 
 ## 6. Future Improvements

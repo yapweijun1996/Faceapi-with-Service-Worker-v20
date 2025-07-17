@@ -20,6 +20,22 @@
 * while the underlying video feed is paused.  Progress is persisted in
 * IndexedDB so a partially completed registration survives a page reload.
 */
+
+// ---------------------------------------------------------------------------
+//  Logging Utility
+// ---------------------------------------------------------------------------
+const DEBUG_MODE = true; // Set to true to see detailed debug messages
+const log = {
+  info: (message, ...args) => console.log(`[INFO] ${message}`, ...args),
+  warn: (message, ...args) => console.warn(`[WARN] ${message}`, ...args),
+  error: (message, ...args) => console.error(`[ERROR] ${message}`, ...args),
+  debug: (message, ...args) => {
+    if (DEBUG_MODE) {
+      console.log(`[DEBUG] ${message}`, ...args);
+    }
+  }
+};
+
 var videoId = "video";
 /**
 * ID of the hidden canvas used for capturing raw video frames for inference.
@@ -104,7 +120,7 @@ function saveProgress() {
 	openProgressDB().then(db => {
 		const tx = db.transaction('progress', 'readwrite');
 		tx.objectStore('progress').put({ id: 'current', data });
-	}).catch(e => console.warn('Failed to save progress', e));
+	}).catch(e => log.warn('Failed to save progress', e));
 }
 
 function loadProgress() {
@@ -126,7 +142,7 @@ function loadProgress() {
 			capturedFrames.forEach(url => addCapturePreview(url));
 			updateProgress();
 		};
-	}).catch(e => console.warn('Failed to load progress', e));
+	}).catch(e => log.warn('Failed to load progress', e));
 }
 
 function clearProgress() {
@@ -158,7 +174,7 @@ async function initDB() {
             resolve(db);
         };
         request.onerror = (event) => {
-            console.error('Database error:', event.target.error);
+            log.error('Database error:', event.target.error);
             reject(event.target.error);
         };
     });
@@ -224,12 +240,13 @@ function adjustDetectionForDevice() {
 		const mem = navigator.deviceMemory || 4;
 		const cores = navigator.hardwareConcurrency || 4;
 		if (mem <= 2 || cores <= 2) {
+			log.info('Low-spec device detected, adjusting settings for performance.');
 			face_detector_options_setup.inputSize = 96;
 			// Increase threshold slightly for performance
 			face_detector_options_setup.scoreThreshold = Math.max(face_detector_options_setup.scoreThreshold || 0.5, 0.5);
 		}
 	} catch (err) {
-		console.warn('Device capability detection failed', err);
+		log.warn('Device capability detection failed', err);
 	}
 }
 
@@ -625,7 +642,7 @@ function logCalibrationSummary() {
 	if (registrationAttemptDistances.length === 0) return;
 	const sum = registrationAttemptDistances.reduce((a, b) => a + b, 0);
 	const avg = sum / registrationAttemptDistances.length;
-	console.log('Average registration distance:', avg.toFixed(3));
+	log.debug(`Calibration Summary: Average registration distance is ${avg.toFixed(3)}`);
 	registrationAttemptDistances = [];
 }
 
@@ -657,7 +674,7 @@ function drawRegistrationOverlay(detection) {
 async function camera_start() {
   const video = document.getElementById(videoId);
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    console.error('getUserMedia not supported');
+    log.error('Camera API: getUserMedia not supported in this browser.');
     if (typeof showPermissionOverlay === 'function') showPermissionOverlay();
     showMessage('error', 'Camera not supported in this browser.');
     return;
@@ -676,19 +693,19 @@ async function camera_start() {
     // Try to play video after metadata loads
     video.onloadedmetadata = () => {
       video.play().catch(e => {
-        console.warn('video.play() failed:', e);
+        log.warn('video.play() failed, possibly due to browser policy.', e);
       });
     };
 
     // Add error handlers to video
-    video.onerror = e => console.error('Video error event:', e);
-    video.onpause = () => console.log('Video paused');
-    video.onplay = () => console.log('Video playing');
+    video.onerror = e => log.error('Video element error:', e);
+    video.onpause = () => log.debug('Video paused.');
+    video.onplay = () => log.debug('Video playing.');
 
     const overlay = document.getElementById('permissionOverlay');
     if (overlay) overlay.style.display = 'none';
   } catch (err) {
-    console.error('Error accessing webcam:', err);
+    log.error('Error accessing webcam:', err);
     if (typeof showPermissionOverlay === 'function') showPermissionOverlay();
     showMessage('error', 'Unable to access camera: ' + err.message);
   }
@@ -753,7 +770,7 @@ async function handleJsonFileInput(event) {
 async function load_face_descriptor_json(warmupFaceDescriptorJson, merge = false) {
 	await faceApiReadyPromise; // Wait for models to load
 	if (!isFaceApiReady) {
-        console.warn('Face API not ready, deferring JSON load.');
+        log.warn('Face API not ready, deferring JSON load.');
         // Optionally, you could queue this to run after API is ready
         return;
     }
@@ -828,6 +845,7 @@ async function load_face_descriptor_json(warmupFaceDescriptorJson, merge = false
 		camera_start();
 		video_face_detection();
 	} catch (error) {
+		log.error('Failed to load face descriptors from JSON.', error);
 		showMessage('error', 'Error loading face descriptors: ' + error.message + '. Please verify the JSON structure.');
 	}
 }
@@ -921,7 +939,7 @@ async function drawImageDataToCanvas(detections, canvasId) {
 	
 	// Expect [results, imageDataArray]; guard against invalid shapes
 	if (!Array.isArray(detections) || detections.length < 2) {
-		console.log('No image data to draw');
+		log.debug('No image data to draw for canvas snapshot.');
 		return;
 	}
 	
@@ -929,7 +947,7 @@ async function drawImageDataToCanvas(detections, canvasId) {
 	const images = detections[1];
 	
 	if (!Array.isArray(images) || images.length === 0) {
-		console.log('No image data to draw');
+		log.debug('No image data array found to draw snapshot.');
 		return;
 	}
 	
@@ -1193,7 +1211,7 @@ function faceapi_register(descriptor) {
 		const distances = currentUserDescriptors.map(d => faceapi.euclideanDistance(descriptor, d));
 		const minDist = Math.min(...distances);
 		registrationAttemptDistances.push(minDist);
-		console.log('Registration distance:', minDist.toFixed(3));
+		log.debug(`Registration check: Minimum distance to existing captures is ${minDist.toFixed(3)}`);
 		// Update best candidate if more distinct
 		currentRegistrationAttempt++;
 		if (minDist > bestCandidateMinDist) {
@@ -1258,7 +1276,7 @@ function faceapi_register(descriptor) {
 					window.location.href = 'index.html';
 				}, 2000);
 			}).catch(err => {
-				console.error(err);
+				log.error('Failed to save user profile to IndexedDB.', err);
 				showMessage('error', 'Failed to save user profile.');
 			});
 		}
@@ -1326,26 +1344,23 @@ async function faceapi_verify(descriptor, imageData){
 				}
 			}
 			if (multiple_face_detection_yn !== "y") {
-				console.log(`Face Verified: ${userMeta.name} (${userMeta.id}), distance: ${distance.toFixed(3)}`);
+				log.info(`Face Verified: ${userMeta.name} (${userMeta.id}), distance: ${distance.toFixed(3)}`);
 			} else {
-				console.log(`Face Detected: ${userMeta.name} (${userMeta.id}), distance: ${distance.toFixed(3)}`);
+				log.debug(`Face Detected: ${userMeta.name} (${userMeta.id}), distance: ${distance.toFixed(3)}`);
 			}
 		} else {
-			// No match found
+			log.debug('No matching face found in verification check.');
 		}
 	}
 }
 
 function handleWorkerMessage(event) {
-    console.log('Received message from worker:', event.data.type);
+    log.debug(`[Worker] Received message: ${event.data.type}`);
     switch (event.data.type) {
         case 'MODELS_LOADED':
-            console.log('Face detection models loaded by worker.');
-            isFaceApiReady = true;
-            if (typeof resolveFaceApiReady === 'function') {
-                resolveFaceApiReady();
-            }
-            hideLoadingOverlay();
+            log.info('[Worker] Models loaded successfully. Starting warmup...');
+            // Models are loaded, now trigger the warmup process.
+            // The UI loader will remain visible until the warmup is also complete.
             faceapi_warmup();
             break;
         case 'DETECTION_RESULT':
@@ -1412,13 +1427,31 @@ function handleWorkerMessage(event) {
             }
             break;
         case 'WARMUP_RESULT':
-            console.log('Warmup completed by worker.');
+            log.info('[Worker] Warmup completed. Face API is now fully ready.');
+            if (isFaceApiReady) {
+                log.debug('Face API already marked as ready, skipping duplicate warmup completion.');
+                return;
+            }
+            isFaceApiReady = true;
+            if (typeof resolveFaceApiReady === 'function') {
+                resolveFaceApiReady();
+            }
+
+            // Execute all functions queued for after warmup
             if (typeof warmup_completed !== 'undefined' && Array.isArray(warmup_completed)) {
-                warmup_completed.forEach(func => func());
+                log.info(`Executing ${warmup_completed.length} post-warmup functions.`);
+                warmup_completed.forEach(fn => {
+                    if (typeof fn === 'function') {
+                        fn();
+                    }
+                });
+            } else {
+                // Fallback for pages without a queue
+                hideLoadingOverlay();
             }
             break;
         default:
-            console.log('Unknown message type from worker:', event.data.type);
+            log.warn(`[Worker] Received unknown message type: ${event.data.type}`);
     }
 }
 
@@ -1428,7 +1461,7 @@ async function initWorkerAddEventListener() {
 
 async function workerRegistration() {
 	if (!('serviceWorker' in navigator)) {
-		console.error('Service workers are not supported in this browser.');
+		log.error('Service workers are not supported in this browser.');
 		return;
 	}
 	
@@ -1440,18 +1473,18 @@ async function workerRegistration() {
 	let registration = registrations.find(reg => reg.active && reg.active.scriptURL.endsWith(serviceWorkerFileName));
 	
 	if (!registration) {
-		console.log('Registering new service worker');
+		log.info('No active service worker found. Registering a new one.');
 		try {
 			registration = await navigator.serviceWorker.register(serviceWorkerFilePath, { scope: swScope });
 		} catch (err) {
-			console.error('Service worker registration failed:', err);
+			log.error('Service worker registration failed:', err);
 			throw err;
 		}
 	}
 	
 	// Wait until the service worker is activated. Avoid using navigator.serviceWorker.ready
 	if (!registration.active) {
-		console.log('Waiting for service worker to activate...');
+		log.info('Waiting for service worker to activate...');
 		
 		await new Promise(resolve => {
 			// If there is an installing worker listen for state changes
@@ -1497,7 +1530,7 @@ async function load_model() {
 			worker.postMessage({ type: 'LOAD_MODELS' });
 		}
 	} else {
-		console.error('Unable to post message, worker is undefined');
+		log.error('Unable to post message to worker, worker reference is undefined.');
 	}
 }
 
@@ -1507,30 +1540,26 @@ async function initWorker() {
 			// Optionally uncomment if needed
 			// await unregisterAllServiceWorker();
 			
-			console.log("Registering service worker...");
+			log.info("Initializing Service Worker...");
 			await workerRegistration(); // Wait for worker registration
 			
-			console.log("Adding event listeners...");
+			log.info("Attaching event listeners...");
 			await initWorkerAddEventListener(); // Wait for event listeners to be added
 			
-			console.log("Waiting for 1 second...");
+			log.info("Pausing for 500ms to ensure worker is ready...");
 			await delay(500); // Wait for 1 second to give the service worker some time to activate. If not, when the service worker is created for the first time, posting a message will cause an error and stop everything.
 			
-			console.log("Loading model...");
+			log.info("Requesting model load...");
 			await load_model(); // Wait for the model to load
 			
 			isWorkerReady = true; // Set the worker as ready
-			isFaceApiReady = true;
-			if (typeof resolveFaceApiReady === 'function') {
-				resolveFaceApiReady();
-			}
-			hideLoadingOverlay();
-			console.log("Worker initialized successfully.");
+			log.info("Service Worker setup complete. Waiting for model and warmup confirmation from worker...");
 		} catch (error) {
-			console.error("Error initializing worker:", error);
+			log.error("Error initializing Service Worker:", error);
+			hideLoadingOverlay(); // Hide loader on failure
 		}
 	} else {
-		console.error('Service workers are not supported in this browser.');
+		log.error('Service workers are not supported in this browser.');
 	}
 }
 
@@ -1575,7 +1604,7 @@ function faceapi_warmup() {
 
 // Initialize the Web Worker fallback
 async function startWebWorker() {
-    console.log("Service Worker not supported, falling back to Web Worker.");
+    log.info("Falling back to Web Worker.");
     showLoadingOverlay();
 
     if (window.Worker) {
@@ -1588,7 +1617,7 @@ async function startWebWorker() {
         };
 
         worker.onerror = (error) => {
-            console.error("Web Worker error:", error);
+            log.error("Web Worker error:", error);
             hideLoadingOverlay();
             showMessage('error', 'An error occurred with the Web Worker.');
         };
@@ -1596,7 +1625,7 @@ async function startWebWorker() {
         // Start loading models in the Web Worker
         worker.postMessage({ type: 'LOAD_MODELS' });
     } else {
-        console.error("Web Workers are not supported in this browser.");
+        log.error("Web Workers are not supported in this browser.");
         hideLoadingOverlay();
         showMessage('error', 'Face detection is not supported on this browser.');
     }
@@ -1605,10 +1634,10 @@ async function startWebWorker() {
 // Global init function for face-api
 async function initFaceApi() {
     if (isWorkerReady) {
-        console.log("Face API already initialized or in progress.");
+        log.info("Face API initialization already in progress.");
         return faceApiReadyPromise;
     }
-    console.log("Initializing Face API...");
+    log.info("Initializing Face API...");
     showLoadingOverlay();
 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -1617,19 +1646,18 @@ async function initFaceApi() {
 
     // Prefer Service Worker, but have a robust fallback
     if (swSupported && offscreenSupported && !isIOS) {
-        console.log("Attempting to initialize with Service Worker.");
+        log.info("Browser supports Service Worker and OffscreenCanvas. Attempting to initialize.");
         try {
             await initWorker();
-            console.log("Service Worker initialized successfully.");
         } catch (error) {
-            console.error("Service Worker initialization failed. Falling back to Web Worker.", error);
+            log.error("Service Worker initialization failed. Falling back to Web Worker.", error);
             await startWebWorker();
         }
     } else {
         let reason = !swSupported ? "ServiceWorker not supported" :
                      !offscreenSupported ? "OffscreenCanvas not supported" :
                      "iOS detected";
-        console.warn(`${reason}. Forcing Web Worker fallback.`);
+        log.warn(`Compatibility check failed: ${reason}. Forcing Web Worker fallback.`);
         await startWebWorker();
     }
     return faceApiReadyPromise;
@@ -1642,9 +1670,9 @@ document.addEventListener("DOMContentLoaded", async function(event) {
     if (window.location.pathname.endsWith('face_register.html') || window.location.pathname.endsWith('face_verify.html') || window.location.pathname.endsWith('profile_management.html')) {
         try {
             await initFaceApi();
-            console.log("Face API is ready, proceeding with page setup.");
+            log.info("Face API is ready, proceeding with page-specific setup.");
         } catch (error) {
-            console.error("Failed to initialize Face API for the page:", error);
+            log.error("Failed to initialize Face API for the page:", error);
             // Optionally, show an error message to the user
         }
     }
@@ -1717,7 +1745,7 @@ document.addEventListener("DOMContentLoaded", async function(event) {
 					load_face_descriptor_json(txt);
 				}
 			} catch (err) {
-				console.error('Invalid verification JSON', err);
+				log.error('Invalid verification JSON provided in textarea.', err);
 			}
 		};
 		verifyTa.addEventListener('input', tryStartVerification);

@@ -359,7 +359,7 @@
 			// Delay camera start & detection until models are fully loaded and warmed up
 			// The worker will send WARMUP_RESULT after MODELS_LOADED, at which point
 			// faceapi_warmup.js will invoke these callbacks.
-			var warmup_completed = [camera_start, video_face_detection];
+			var warmup_completed = [hideLoadingOverlay, camera_start, video_face_detection];
 
 			// Load users from IndexedDB on page load
 			document.addEventListener('DOMContentLoaded', async () => {

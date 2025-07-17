@@ -101,6 +101,7 @@
 * Misaligned overlay fixed with ResizeObserver.
 * UI never blocks; model load progress is visible.
 * All local data persists through browser reloads/installations.
+* **Worker Re-initialization**: The Page Visibility API is used to detect when the user returns to the tab. A health check is sent to the worker, and if it fails, the Face API is automatically re-initialized to ensure the application remains responsive.
 
 ---
 
