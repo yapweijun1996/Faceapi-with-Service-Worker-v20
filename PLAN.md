@@ -125,6 +125,10 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: The codebase used inconsistent `console.log` statements, making debugging difficult and the console output noisy.
     *   **Solution**: A simple, structured logging utility was introduced in `faceapi_warmup.js`. It provides distinct levels (`info`, `warn`, `error`, `debug`) and adds prefixes to all messages for clarity. A global `DEBUG_MODE` flag allows developers to easily enable or disable verbose logging, significantly improving the debugging experience.
 
+12. **Camera Not Starting Automatically on Registration Page**:
+    *   **Problem**: On the `face_register.html` page, the camera would not start automatically after the Face API models were loaded and warmed up. The `warmup_completed` callback queue was not being executed.
+    *   **Solution**: The `handleWorkerMessage` function in `faceapi_warmup.js` was updated to correctly iterate through and execute the functions in the `warmup_completed` array. A guard was also added to prevent the warmup completion logic from running multiple times, resolving the issue.
+
 ---
 
 ## 6. Future Improvements
