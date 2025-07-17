@@ -112,6 +112,10 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: The application would get stuck on the loading screen on `face_register.html` because the worker initialization logic was not robust enough to handle silent failures.
     *   **Solution**: The `initFaceApi` function was refactored to use a `try...catch` block instead of `Promise.race`, ensuring that any failure in the Service Worker initialization reliably triggers the Web Worker fallback.
 
+9.  **Improved Navigation Flow**:
+    *   **Problem**: Users had no direct way to return to the main page from the registration or verification flows, and were not automatically redirected after completion.
+    *   **Solution**: Added a "Go to Index" link on both `face_register.html` and `face_verify.html`. Implemented automatic redirection to `index.html` after a successful registration or verification to create a smoother user journey.
+
 ---
 
 ## 6. Future Improvements

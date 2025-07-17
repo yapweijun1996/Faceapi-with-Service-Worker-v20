@@ -85,6 +85,7 @@
 2. App overlays guide, auto-captures 20 valid face frames (quality-checked).
 3. Extracts descriptors, stores `{userId, name, descriptors}` to IndexedDB.
 4. Shows completion UI + thumbnails for user review.
+5. After successful registration, the user is automatically redirected to the main page. A visible link is also available to return to the main page at any time.
 
 ### Verification
 
@@ -92,6 +93,7 @@
 2. User starts camera; live video + overlays.
 3. Faces detected in video are compared to stored descriptors.
 4. Overlay: Green (match, name displayed), Red (no match).
+5. Upon completion, the user is redirected to the main page. A visible link is also available to return to the main page at any time.
 
 ### Error/Edge Handling
 
