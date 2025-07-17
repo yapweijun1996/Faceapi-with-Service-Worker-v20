@@ -112,15 +112,19 @@ Communication between the UI thread and the background worker is handled via `po
 7.  **User Submission**: The user clicks "Submit." The UI creates a user profile object containing the ID, name, and all 21 descriptors (20 raw + 1 mean).
 8.  **Database Storage**: The profile object is saved to the `users` object store in IndexedDB.
 
-### b. User Verification Flow
+### b. User Verification Flow (Optimized)
 
-1.  **Load Profiles (`face_verify.html`)**: The application fetches all user profiles from the `users` object store in IndexedDB. The descriptors for all users are held in memory.
-2.  **Start Camera**: The camera is activated. For each video frame, an `ImageBitmap` is sent to the worker for processing, just like in registration.
-3.  **Real-time Matching**:
+1.  **Load Profiles & Initialize Matcher (`face_verify.html`)**: On page load, the application fetches all user profiles from IndexedDB. It then creates a `faceapi.FaceMatcher` instance, pre-loading it with the mean descriptor of every registered user. This matcher becomes the single source of truth for identifying faces.
+2.  **Start Camera**: The camera is activated. For each video frame, an `ImageBitmap` is sent to the worker for processing.
+3.  **Optimized Real-time Matching**:
     -   The worker computes the descriptor for the face in the current video frame.
-    -   The UI thread receives this new descriptor and compares it against the stored descriptors of all registered users using `faceapi.FaceMatcher`.
-    -   The `FaceMatcher` calculates the Euclidean distance between the live descriptor and the stored mean descriptors. If the distance is below a certain threshold (e.g., 0.4), it's considered a match.
-4.  **UI Feedback**: The video overlay is updated in real-time to show a green box (match) with the user's name or a red box (no match).
+    -   The UI thread receives this new descriptor and uses the pre-loaded `faceMatcher.findBestMatch()` method to efficiently find the most likely user.
+    -   If a match is found with a high enough confidence (i.e., the distance is below the threshold and the label is not 'unknown'), the user is marked as verified.
+4.  **Dynamic Matcher Updates for Performance**:
+    -   **Crucially**, once a user is successfully verified, their descriptors are **removed** from the live `FaceMatcher` instance.
+    -   The `FaceMatcher` is rebuilt with only the remaining, unverified users. This ensures that subsequent frames are only compared against people who have not yet been found, drastically reducing computational load as the verification session progresses.
+5.  **UI Feedback**: The video overlay is updated in real-time to show a green box (match) with the user's name or a red box (no match).
+6.  **Completion**: The process continues until the `FaceMatcher` is empty (all users are verified) or the user manually stops the process.
 
 ---
 
