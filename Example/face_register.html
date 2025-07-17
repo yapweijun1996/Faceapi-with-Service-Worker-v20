@@ -493,30 +493,25 @@
 				<button onclick="hideTimeoutOverlay(); cancelRegistration()">Cancel</button>
 			</div>
 		</div>
-		<div style="display:none;">
-			<h1>Face Registration</h1>
-			<a href="index.html">Go to Index</a><br>
-			<div style="display:none;">
-				<input type="file" id="jsonFileInput" accept=".json" onchange="handleJsonFileInput(event)" multiple>
-				<textarea class="user_face_id_json" style="display:none;"></textarea>
-				<!-- Add user ID and name inputs -->
-				<label>User ID: <input type="text" id="userIdInput" placeholder="Enter user ID"></label>
-				<label>User Name: <input type="text" id="userNameInput" placeholder="Enter user name"></label><br>
+		<div id="progressContainer" class="controls expanded">
+			<div id="registrationForm" style="width: 100%; text-align: center; padding: 1rem;">
+				<h3>Register New Profile</h3>
+				<input type="text" id="userIdInput" placeholder="Enter User ID" style="padding: 10px; margin: 5px; border-radius: 4px; border: 1px solid #ccc; width: 80%;">
+				<input type="text" id="userNameInput" placeholder="Enter User Name" style="padding: 10px; margin: 5px; border-radius: 4px; border: 1px solid #ccc; width: 80%;">
+				<button id="startBtn" class="ctrl-btn ctrl-btn-success" style="margin-top: 10px;">Start Registration</button>
 			</div>
-		</div>
-		<div id="progressContainer" class="controls">
-			<span id="progressText">0/20 captures</span>
-			<span id="timerText"></span>
-			<div id="progressBar"><div id="progressFill"></div></div>
-			<div id="progressButtons">
-				<div style="display:none;">
-					<button id="retakeBtn" class="ctrl-btn">Retake Last</button>
+
+			<div id="captureProgress" style="display:none; width: 100%;">
+				<span id="progressText">0/20 captures</span>
+				<span id="timerText"></span>
+				<div id="progressBar"><div id="progressFill"></div></div>
+				<div id="progressButtons">
+					<button id="restartBtn" class="ctrl-btn ctrl-btn-warning">Restart</button>
+					<button id="cancelBtn" class="ctrl-btn ctrl-btn-danger">Cancel</button>
+					<button id="submitBtn" class="ctrl-btn ctrl-btn-success" style="display:none;">Submit</button>
 				</div>
-				<button id="restartBtn" class="ctrl-btn ctrl-btn-warning">Restart</button>
-				<button id="cancelBtn" class="ctrl-btn ctrl-btn-danger">Cancel</button>
-				<button id="downloadBtn" class="ctrl-btn ctrl-btn-success" style="display:none;">Download</button>
+				<div id="capturePreview"></div>
 			</div>
-			<div id="capturePreview"></div>
 		</div>
 		<div id="imageModal" class="modal">
 			<span class="close">&times;</span>
@@ -530,14 +525,28 @@
 				return params.get(name);
 			}
 			document.addEventListener('DOMContentLoaded', async () => {
-				const defId = getParam('userid') || 'test001';
-				const defName = getParam('username') || 'test';
-				document.getElementById('userIdInput').value = defId;
-				document.getElementById('userNameInput').value = defName;
 				checkOrientation();
 				if(!localStorage.getItem('instructionsShown')){
 					showInstructions();
 				}
+
+				document.getElementById('startBtn').addEventListener('click', () => {
+					const userId = document.getElementById('userIdInput').value.trim();
+					const userName = document.getElementById('userNameInput').value.trim();
+
+					if (!userId || !userName) {
+						alert('User ID and User Name cannot be empty.');
+						return;
+					}
+
+					document.getElementById('registrationForm').style.display = 'none';
+					document.getElementById('captureProgress').style.display = 'block';
+					document.querySelector('.face-detection-container').style.display = 'flex';
+					
+					// Start the camera and detection
+					camera_start();
+					video_face_detection();
+				});
 			});
 			
 			function checkOrientation(){
@@ -583,7 +592,7 @@
 			});
 		</script>
 		
-		<div class="face-detection-container"  style="display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;">
+		<div class="face-detection-container"  style="display:none;gap:1rem;flex-wrap:wrap;justify-content:center;">
 			<div class="video-wrapper">
 				<video id="video" width="640" height="480" autoplay playsinline muted></video>
 				<!-- Hidden canvas for inference: captures each video frame to send to the worker for face detection -->
@@ -626,7 +635,7 @@
 			* ================================
 			*/
 			var faceapi_action = "register"; // verify, register
-			var warmup_completed = [hideLoadingOverlay, camera_start, video_face_detection];
+			var warmup_completed = [hideLoadingOverlay];
 			var face_detector_options_setup = {
 				inputSize: 128,
 				scoreThreshold: 0.75, // 0.8 = 80%

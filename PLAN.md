@@ -134,6 +134,10 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: If the application tab was left in the background, the browser would eventually terminate the worker to conserve resources, causing the app to become unresponsive upon return.
     *   **Solution**: A re-initialization mechanism was implemented using the Page Visibility API. When the user returns to the tab, a health check (`PING`/`PONG`) is sent to the worker. If the worker doesn't respond, the application automatically re-initializes the Face API, ensuring a seamless user experience.
 
+14. **Removed GPS Data Collection**:
+    *   **Problem**: The verification process included collecting GPS coordinates, which caused a delay and an unnecessary permission request, conflicting with the project's privacy-first principles.
+    *   **Solution**: The GPS collection logic was completely removed from the `getDeviceMetadata` function in `faceapi_warmup.js`. The application no longer requests location permissions, and the captured verification data no longer includes GPS coordinates, resulting in a faster and more private user experience.
+
 ---
 
 ## 6. Future Improvements

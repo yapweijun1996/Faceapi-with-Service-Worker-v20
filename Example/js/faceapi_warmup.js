@@ -389,18 +389,20 @@ function restartRegistration() {
 	registrationStartTime = null;
 	registrationCompleted = false;
 	faceapi_action = 'register';
-	const downloadBtn = document.getElementById('downloadBtn');
-	if (downloadBtn) downloadBtn.style.display = 'none';
+	
 	updateProgress();
 	clearProgress();
 	clear_all_canvases();
+
+	// Reset UI to initial state
 	const container = document.querySelector('.face-detection-container');
-	if (container) container.style.display = 'flex';
-	camera_start().then(() => {
-		if (!videoDetectionStep) {
-			video_face_detection();
-		}
-	});
+	if (container) container.style.display = 'none';
+	const regForm = document.getElementById('registrationForm');
+	if (regForm) regForm.style.display = 'block';
+	const capProgress = document.getElementById('captureProgress');
+	if (capProgress) capProgress.style.display = 'none';
+	const submitBtn = document.getElementById('submitBtn');
+	if (submitBtn) submitBtn.style.display = 'none';
 }
 
 function cancelRegistration() {
@@ -1197,11 +1199,7 @@ function faceapi_register(descriptor) {
 	if (!descriptor || registrationCompleted) {
 		return;
 	}
-	// On first capture, read user info
-	if (currentUserDescriptors.length === 0) {
-		currentUserId = document.getElementById('userIdInput').value.trim();
-		currentUserName = document.getElementById('userNameInput').value.trim();
-	}
+
 	let accept = false;
 	// Always accept the first descriptor
 	if (currentUserDescriptors.length === 0) {
@@ -1252,35 +1250,40 @@ function faceapi_register(descriptor) {
 			camera_stop();
 			clear_all_canvases();
 			
-			const meanDescriptor = computeMeanDescriptor(currentUserDescriptors);
-			const user = {
-				id: currentUserId,
-				name: currentUserName,
-				descriptors: [
-					...currentUserDescriptors.map(d => Array.from(d)),
-					Array.from(meanDescriptor)
-				]
-			};
-
-			saveUser(user).then(() => {
-				alert("Registration completed and saved for user: " + currentUserName + " (" + currentUserId + ")");
-				// Optionally clear progress after successful save
-				clearProgress();
-				// Hide registration UI elements and show success message
-				const container = document.getElementById('progressContainer');
-				if (container) container.classList.add('expanded');
-				const downloadBtn = document.getElementById('downloadBtn');
-				if (downloadBtn) downloadBtn.style.display = 'none'; // No more download
-				updateProgress();
-				setTimeout(() => {
-					window.location.href = 'index.html';
-				}, 2000);
-			}).catch(err => {
-				log.error('Failed to save user profile to IndexedDB.', err);
-				showMessage('error', 'Failed to save user profile.');
-			});
+			const submitBtn = document.getElementById('submitBtn');
+			if (submitBtn) {
+				submitBtn.style.display = 'inline-block';
+			}
+			showMessage('success', 'Capture complete! Please review and click Submit.');
 		}
 	}
+}
+
+async function submitRegistration() {
+    if (currentUserDescriptors.length < maxCaptures) {
+        showMessage('error', 'Please complete the capture process first.');
+        return;
+    }
+
+    const meanDescriptor = computeMeanDescriptor(currentUserDescriptors);
+    const user = {
+        id: currentUserId,
+        name: currentUserName,
+        descriptors: [
+            ...currentUserDescriptors.map(d => Array.from(d)),
+            Array.from(meanDescriptor)
+        ]
+    };
+
+    try {
+        await saveUser(user);
+        alert("Registration completed and saved for user: " + currentUserName + " (" + currentUserId + ")");
+        clearProgress();
+        window.location.href = 'index.html';
+    } catch (err) {
+        log.error('Failed to save user profile to IndexedDB.', err);
+        showMessage('error', 'Failed to save user profile.');
+    }
 }
 
 var vle_distance_rate = 0.3;
@@ -1734,7 +1737,10 @@ document.addEventListener("DOMContentLoaded", async function(event) {
     }
 
 	clearProgress();
-	loadProgress();
+	// Do not load progress automatically on registration page, as it's a new session.
+    if (!window.location.pathname.endsWith('face_register.html')) {
+        loadProgress();
+    }
 	adjustDetectionForDevice();
 	
 	// Add ResizeObserver to keep canvas overlays aligned with the video
@@ -1762,6 +1768,33 @@ document.addEventListener("DOMContentLoaded", async function(event) {
 	if (restart) restart.addEventListener('click', restartRegistration);
 	if (cancel) cancel.addEventListener('click', cancelRegistration);
 	if (download) download.addEventListener('click', downloadRegistrationData);
+
+	const startBtn = document.getElementById('startBtn');
+    if (startBtn) {
+        startBtn.addEventListener('click', () => {
+            currentUserId = document.getElementById('userIdInput').value.trim();
+            currentUserName = document.getElementById('userNameInput').value.trim();
+
+            if (!currentUserId || !currentUserName) {
+                alert('User ID and User Name cannot be empty.');
+                return;
+            }
+
+            document.getElementById('registrationForm').style.display = 'none';
+            document.getElementById('captureProgress').style.display = 'block';
+            document.querySelector('.face-detection-container').style.display = 'flex';
+            
+            // Start the camera and detection
+            camera_start();
+            video_face_detection();
+        });
+    }
+
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', submitRegistration);
+    }
+
 	const verifyRestart = document.getElementById('verifyRestartBtn');
 	const verifyCancel = document.getElementById('verifyCancelBtn');
 	if (verifyRestart) verifyRestart.addEventListener('click', restartVerification);

@@ -56,7 +56,6 @@
   userId: "A12345",             // User’s unique ID (string)
   name: "Alice Tan",            // Display name (string)
   descriptors: [Float32Array],  // Array of 128-d face descriptors
-  // Optionally: profileImage: "data:image/png;base64,..." (for thumbnails)
 }
 ````
 

@@ -521,11 +521,6 @@ function captureAndSaveVerifiedUserImage(imageData, metadata) {
 	let yPos = canvas.height - 5;
 	const lineHeight = 14;
 
-	if (metadata.gps) {
-		const gpsText = `GPS: ${metadata.gps.latitude.toFixed(4)}, ${metadata.gps.longitude.toFixed(4)}`;
-		ctx.fillText(gpsText, 5, yPos);
-		yPos -= lineHeight;
-	}
 	if (metadata.timeZone) {
 		const tzText = `TimeZone: ${metadata.timeZone} (UTC${metadata.timeZoneOffset})`;
 		ctx.fillText(tzText, 5, yPos);
@@ -549,33 +544,7 @@ function captureAndSaveVerifiedUserImage(imageData, metadata) {
 	return canvas.toDataURL('image/jpeg', 0.5);
 }
 
-async function getGpsCoordinates() {
-	return new Promise((resolve) => {
-		const askForPermission = () => {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					resolve({
-						latitude: position.coords.latitude,
-						longitude: position.coords.longitude,
-					});
-				},
-				(error) => {
-					if (error.code === error.PERMISSION_DENIED) {
-						alert("GPS permission is required for verification. Please allow access to continue.");
-						setTimeout(askForPermission, 1000); // Ask again after a short delay
-					} else {
-						console.error("Error getting GPS location:", error);
-						resolve(null); // Resolve with null if there's another error
-					}
-				}
-			);
-		};
-		askForPermission();
-	});
-}
-
 async function getDeviceMetadata() {
-	const gps = await getGpsCoordinates();
 	const now = new Date();
 	const utcTime = now.toUTCString();
 	const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -590,7 +559,7 @@ async function getDeviceMetadata() {
 	const deviceName = result.device.vendor ? `${result.device.vendor} ${result.device.type || ''}`.trim() : 'Unknown';
 	const deviceModel = result.os.name ? `${result.os.name} ${result.os.version || ''}`.trim() : 'Unknown';
 
-	return { gps, utcTime, timeZone, timeZoneOffset, deviceName, deviceModel, deviceUserAgent: userAgent };
+	return { utcTime, timeZone, timeZoneOffset, deviceName, deviceModel, deviceUserAgent: userAgent };
 }
 
 function isConsistentWithCurrentUser(descriptor) {
@@ -831,7 +800,6 @@ async function load_face_descriptor_json(warmupFaceDescriptorJson, merge = false
 			utcTime: null,
 			timeZone: null,
 			timeZoneOffset: null,
-			gps: null,
 			device: null,
 			deviceName: null,
 			deviceModel: null,
@@ -1331,7 +1299,14 @@ async function faceapi_verify(descriptor, imageData){
 				}
 				verificationResults = verificationResults.map(r => {
 					if (r.id === uid) {
-						return { ...r, verified: true, capturedImage, ...metadata };
+						return { ...r, verified: true, capturedImage, 
+							utcTime: metadata.utcTime,
+							timeZone: metadata.timeZone,
+							timeZoneOffset: metadata.timeZoneOffset,
+							deviceName: metadata.deviceName,
+							deviceModel: metadata.deviceModel,
+							deviceUserAgent: metadata.deviceUserAgent
+						};
 					}
 					return r;
 				});
