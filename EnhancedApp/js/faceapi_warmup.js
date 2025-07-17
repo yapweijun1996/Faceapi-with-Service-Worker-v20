@@ -1212,13 +1212,6 @@ function handleWorkerMessage(event) {
             // The new warmup process will handle setting isFaceApiReady.
             faceapi_warmup();
             break;
-        case 'WARMUP_RESULT':
-            if (event.data.success) {
-                if (resolveWarmupPromise) resolveWarmupPromise();
-            } else {
-                if (rejectWarmupPromise) rejectWarmupPromise(new Error(event.data.error));
-            }
-            break;
         case 'DETECTION_RESULT':
             const dets = event.data.data.detections[0];
             const imageDataForFrame = event.data.data.detections[1] && event.data.data.detections[1][0];
@@ -1373,45 +1366,60 @@ async function faceapi_warmup() {
     isWarmingUp = true;
     updateModelStatus('Warming up: Verifying models with static image...');
 
-    // Create a new promise for this warmup attempt
-    warmupPromise = new Promise((resolve, reject) => {
-        resolveWarmupPromise = resolve;
-        rejectWarmupPromise = reject;
+    const warmupPromise = new Promise((resolve, reject) => {
+        const warmupTimeout = setTimeout(() => {
+            reject(new Error('Warmup timed out. Worker did not respond.'));
+        }, 10000);
+
+        const onWarmupMessage = (event) => {
+            const message = event.data ? event.data : event;
+            if (message.type === 'WARMUP_RESULT') {
+                clearTimeout(warmupTimeout);
+                // Remove the listener
+                if (worker instanceof Worker) {
+                    worker.removeEventListener('message', onWarmupMessage);
+                } else {
+                    navigator.serviceWorker.removeEventListener('message', onWarmupMessage);
+                }
+
+                if (message.success) {
+                    resolve();
+                } else {
+                    reject(new Error(message.error || 'Unknown warmup error from worker.'));
+                }
+            }
+        };
+
+        // Attach the dedicated listener
+        if (worker instanceof Worker) {
+            worker.addEventListener('message', onWarmupMessage);
+        } else {
+            navigator.serviceWorker.addEventListener('message', onWarmupMessage);
+        }
     });
 
-    // Add a timeout
-    const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Warmup timed out. Worker did not respond.')), 10000)
-    );
-
-    // Trigger a dummy detection using a static image
     if (worker) {
         worker.postMessage({ type: 'WARMUP_WITH_IMAGE' });
     } else {
-        console.error("Worker not available for warmup.");
+        // This case should ideally not be reached if initialization is correct
+        isWarmingUp = false;
         updateModelStatus('Initialization error.', true);
-        isWarmingUp = false; // Reset flag on error
         return;
     }
 
     try {
-        // Race the warmup against the timeout
-        await Promise.race([warmupPromise, timeoutPromise]);
-
-        console.log('Warmup complete: Models loaded and verified with a static image.');
+        await warmupPromise;
+        console.log('Warmup complete: Models loaded and verified.');
         updateModelStatus('Ready.');
         isFaceApiReady = true;
-        if (typeof resolveFaceApiReady === 'function') {
+        if (resolveFaceApiReady) {
             resolveFaceApiReady();
         }
     } catch (error) {
         console.error('Face API warmup failed:', error);
-        updateModelStatus('Warmup failed. Please reload.', true);
+        updateModelStatus(`Warmup failed: ${error.message}. Please reload.`, true);
     } finally {
         isWarmingUp = false;
-        // Clean up promise handlers
-        resolveWarmupPromise = null;
-        rejectWarmupPromise = null;
     }
 }
 
