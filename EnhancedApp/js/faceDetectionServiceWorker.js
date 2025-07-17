@@ -112,12 +112,6 @@ self.addEventListener('message', async function(event) {
         }
       });
       break;
-    case 'WARMUP_FACES':
-      // Create a dummy canvas for warmup
-      const warmupCanvas = new OffscreenCanvas(1, 1);
-      await faceapi.detectAllFaces(warmupCanvas, face_for_loading_options);
-      postToAllClients({ type: 'WARMUP_RESULT' });
-      break;
     case 'WARMUP_WITH_IMAGE':
       try {
         console.log('Worker: Starting warmup with static image...');
