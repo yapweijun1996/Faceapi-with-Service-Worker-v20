@@ -1438,12 +1438,13 @@ async function initializeFaceApi() {
     const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
     const userAgent = navigator.userAgent;
     const isIos = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+    const isIosChrome = isIos && /CriOS/.test(userAgent);
     // Differentiate between standalone Safari and in-app webviews on iOS.
     const isIosWebview = isIos && !/Safari/.test(userAgent);
 
-    // iOS webviews have poor Service Worker support, so we fall back immediately.
-    if (isIosWebview || !swSupported || !offscreenSupported) {
-        console.warn('Service Worker not supported or on iOS Webview. Using Web Worker fallback.');
+    // iOS webviews or Chrome on iOS have poor Service Worker support, so we fall back immediately.
+    if (isIosWebview || isIosChrome || !swSupported || !offscreenSupported) {
+        console.warn('Service Worker not supported or on iOS Webview/Chrome. Using Web Worker fallback.');
         await startWebWorker();
         return;
     }
