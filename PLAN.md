@@ -132,4 +132,8 @@ Based on user feedback, the following issues have been identified and will be ad
         *   In `faceapi_warmup.js`, add checks to detect if the app is running in an iOS webview or Chrome for iOS. If so, immediately fall back to the Web Worker.
         *   Wrap the Service Worker initialization in a `Promise.race()` to compete against a 15-second timeout. If the timeout wins, force a fallback to the Web Worker. This ensures that even on non-iOS devices, a faulty Service Worker does not hang the application.
 
+7.  **`OffscreenCanvas` TypeError in Web Worker**:
+    *   **Problem**: After implementing the Web Worker fallback, a `TypeError: Failed to construct 'OffscreenCanvas'` occurred during the image-based warmup.
+    *   **Solution**: The `triggerImageWarmup` function in `faceapi_warmup.js` was not sending the image's `width` and `height` to the worker. The message payload was updated to include these dimensions, resolving the error and allowing the `OffscreenCanvas` to be constructed correctly in the Web Worker.
+
 This plan provides a clear path to building a high-performance, robust, and user-friendly face recognition application.
