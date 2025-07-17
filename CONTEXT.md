@@ -62,7 +62,7 @@
 
 ### Page Flows
 
-* **index.html:** Loads on first visit; triggers `initFaceApi()` and shows loading state.
+* **index.html:** Loads on first visit; triggers `initFaceApi()` for background model pre-warming.
 * **face\_register.html:** Step-by-step, guided, mobile-first registration; saves to DB.
 * **face\_verify.html:** Loads users, starts camera, real-time matching loop.
 

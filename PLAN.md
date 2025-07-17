@@ -20,8 +20,8 @@ The application operates entirely on the client-side, comprising three key compo
 
 *   **Goal**: To eliminate any loading lag on feature pages by ensuring `face-api.js` models are fully loaded and initialized *before* the user can interact with camera features.
 *   **UX Flow**:
-    1.  When the application starts, a loading overlay is displayed. In the background, the system initializes the worker, loads the required models, and performs a "warmup" detection on a static image.
-    2.  The loading overlay remains visible until this entire process is complete.
+    1.  When the application starts (`index.html`), the system initializes the worker, loads the required models, and performs a "warmup" detection on a static image in the background, without any visible loader.
+    2.  On feature pages (`face_register.html`, `face_verify.html`), a loading overlay is shown until the warmup is complete.
     3.  Once ready, the overlay is hidden. This guarantees that when the user navigates to a feature page, the experience is instant and free of any model-loading delays.
 *   **Technical Implementation**:
     *   A global `initFaceApi()` function in `faceapi_warmup.js` centralizes the worker and model initialization logic.
