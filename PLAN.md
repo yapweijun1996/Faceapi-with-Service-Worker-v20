@@ -138,6 +138,10 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: The verification process included collecting GPS coordinates, which caused a delay and an unnecessary permission request, conflicting with the project's privacy-first principles.
     *   **Solution**: The GPS collection logic was completely removed from the `getDeviceMetadata` function in `faceapi_warmup.js`. The application no longer requests location permissions, and the captured verification data no longer includes GPS coordinates, resulting in a faster and more private user experience.
 
+15. **Corrected Worker Health Check**:
+    *   **Problem**: The health check mechanism for the background worker was unreliable. It failed to correctly process the `PONG` response, causing the check to time out and trigger an unnecessary and time-consuming re-initialization of the entire Face API.
+    *   **Solution**: The health check logic in `faceapi_warmup.js` was refactored to use a persistent message handler. This ensures the `PONG` response is correctly received and processed, preventing false timeouts and eliminating the unnecessary re-initialization, which makes the application more stable and responsive.
+
 ---
 
 ## 6. Future Improvements

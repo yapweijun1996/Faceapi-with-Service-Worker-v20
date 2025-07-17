@@ -529,24 +529,6 @@
 				if(!localStorage.getItem('instructionsShown')){
 					showInstructions();
 				}
-
-				document.getElementById('startBtn').addEventListener('click', () => {
-					const userId = document.getElementById('userIdInput').value.trim();
-					const userName = document.getElementById('userNameInput').value.trim();
-
-					if (!userId || !userName) {
-						alert('User ID and User Name cannot be empty.');
-						return;
-					}
-
-					document.getElementById('registrationForm').style.display = 'none';
-					document.getElementById('captureProgress').style.display = 'block';
-					document.querySelector('.face-detection-container').style.display = 'flex';
-					
-					// Start the camera and detection
-					camera_start();
-					video_face_detection();
-				});
 			});
 			
 			function checkOrientation(){
