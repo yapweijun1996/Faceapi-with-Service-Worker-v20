@@ -1460,6 +1460,8 @@ function triggerImageWarmup() {
 		const message = {
 			type: 'WARMUP_WITH_IMAGE',
 			imageData: imageData,
+			width: img.width,
+			height: img.height,
 		};
 
 		if (navigator.serviceWorker && navigator.serviceWorker.controller) {
