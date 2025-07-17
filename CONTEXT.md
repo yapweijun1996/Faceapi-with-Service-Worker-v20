@@ -120,6 +120,7 @@
 * Instructions always visible during registration/verification.
 * All user-captured images have privacy banner/warning (if used for production).
 * Code is modular; future: convert helpers to ES Modules.
+* **Logging**: A structured logging utility is used to provide clear, prefixed messages. It supports multiple levels (`info`, `warn`, `error`, `debug`) and can be controlled via a global `DEBUG_MODE` flag for easier debugging.
 * Mobile-first: responsive layouts, large buttons, minimum 48px tap targets.
 * Alt text for images/canvas; ARIA attributes as appropriate.
 
