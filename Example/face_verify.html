@@ -287,17 +287,15 @@
 </div>
 		<div style="display:none;">
 			<h1>Face Detection</h1>
-			<a href="#" onclick="urlReplace('index.html')">Go to Index</a><br>
+			<a href="index.html">Go to Index</a><br>
 		</div>
 		<div id="verifyCompleteOverlay">
 			<div>
 				<p>Face verification completed.</p>
-				<button onclick="hideVerifyCompleteOverlay()">OK</button>
+				<button onclick="window.location.href='index.html'">OK</button>
 			</div>
 		</div>
                 <div id="verifyToast"></div>
-                <input type="file" id="jsonFileInput" accept=".json" onchange="handleJsonFileInput(event)" multiple>
-                <textarea class="all_face_id_for_verification" style="display:none;"></textarea>
                 <textarea class="face_verification_result" style="display:none;"></textarea>
 		
 		<div id="verifyProgressContainer" class="controls">
@@ -362,6 +360,70 @@
 			// The worker will send WARMUP_RESULT after MODELS_LOADED, at which point
 			// faceapi_warmup.js will invoke these callbacks.
 			var warmup_completed = [camera_start, video_face_detection];
+
+			// Load users from IndexedDB on page load
+			document.addEventListener('DOMContentLoaded', async () => {
+				await initDB();
+				const users = await getAllUsers();
+				
+				if (users && users.length > 0) {
+					registeredUsers = users;
+					flatRegisteredDescriptors = [];
+					flatRegisteredUserMeta = [];
+					
+					registeredUsers.forEach(user => {
+						user.descriptors.forEach((descArr, idx) => {
+							if (idx === user.descriptors.length - 1 && user.descriptors.length > 1) {
+								// Skip mean descriptor
+								return;
+							}
+							flatRegisteredDescriptors.push(new Float32Array(descArr));
+							flatRegisteredUserMeta.push({ id: user.id, name: user.name });
+						});
+					});
+					
+					registeredDescriptors = flatRegisteredDescriptors;
+					
+					const listEl = document.getElementById('verifyPersonList');
+					if (listEl) {
+						listEl.innerHTML = '';
+						registeredUsers.forEach(u => {
+							const li = document.createElement('li');
+							li.dataset.userId = u.id;
+							const name = u.name || 'Unknown';
+							li.innerHTML = `${name} (${u.id}) – <span class="status">pending</span>`;
+							listEl.appendChild(li);
+						});
+					}
+
+					verificationResults = registeredUsers.map(u => ({
+						id: u.id,
+						name: u.name,
+						verified: false,
+						capturedImage: null,
+						utcTime: null,
+						timeZone: null,
+						timeZoneOffset: null,
+						gps: null,
+						device: null,
+						deviceName: null,
+						deviceModel: null,
+						deviceUserAgent: null
+					}));
+					updateVerificationResultTextarea();
+
+					totalVerifyFaces = registeredUsers.length;
+					verifiedCount = 0;
+					verifiedUserIds = new Set();
+					updateVerifyProgress();
+				} else {
+					console.log("No registered users found in the database.");
+					const listEl = document.getElementById('verifyPersonList');
+					if(listEl) {
+						listEl.innerHTML = '<li>No users registered yet.</li>';
+					}
+				}
+			});
 		</script>
 	</body>
 </html>

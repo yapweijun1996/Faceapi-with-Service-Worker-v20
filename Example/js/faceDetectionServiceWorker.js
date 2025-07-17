@@ -4,6 +4,14 @@ importScripts('face-api.min.js');
 
 let isModelLoaded = false;
 
+// Helper to broadcast messages to all clients
+async function broadcastMessage(message) {
+    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+    clients.forEach(client => {
+        client.postMessage(message);
+    });
+}
+
 const FaceDetectorOptionsDefault = new faceapi.TinyFaceDetectorOptions({
   inputSize: 128,
   scoreThreshold: 0.1,
@@ -11,22 +19,22 @@ const FaceDetectorOptionsDefault = new faceapi.TinyFaceDetectorOptions({
 });
 let face_for_loading_options = FaceDetectorOptionsDefault;
 
-async function loadModels(client) {
+async function loadModels() {
   await faceapi.nets.tinyFaceDetector.loadFromUri('../models');
   await faceapi.nets.faceLandmark68Net.loadFromUri('../models');
   await faceapi.nets.faceRecognitionNet.loadFromUri('../models');
 
   isModelLoaded = true;
-  client.postMessage({ type: 'MODELS_LOADED' });
+  broadcastMessage({ type: 'MODELS_LOADED' });
 }
 
-async function checkModelsLoaded(client) {
+async function checkModelsLoaded() {
   if (isModelLoaded) {
     console.log("checkModelsLoaded : Models are loaded.");
-    client.postMessage({ type: 'MODELS_LOADED' });
+    broadcastMessage({ type: 'MODELS_LOADED' });
   } else {
     console.log("checkModelsLoaded : Models are not loaded yet.");
-    await loadModels(client);
+    await loadModels();
   }
 }
 
@@ -72,8 +80,6 @@ async function detectFaces(imageData, width, height) {
 }
 
 self.addEventListener('message', async function(event) {
-  const client = event.source;
-
   const { type, imageData, width, height, face_detector_options } = event.data;
   if (typeof face_detector_options === "undefined" || face_detector_options === "undefined") {
     face_for_loading_options = FaceDetectorOptionsDefault;
@@ -84,11 +90,11 @@ self.addEventListener('message', async function(event) {
   let detections;
   switch (type) {
     case 'LOAD_MODELS':
-      await checkModelsLoaded(client);
+      await checkModelsLoaded();
       break;
     case 'DETECT_FACES':
       detections = await detectFaces(imageData, width, height);
-      client.postMessage({
+      broadcastMessage({
         type: 'DETECTION_RESULT',
         data: {
           detections: detections,
@@ -98,7 +104,7 @@ self.addEventListener('message', async function(event) {
       break;
     case 'WARMUP_FACES':
       detections = await detectFaces(imageData, width, height);
-      client.postMessage({
+      broadcastMessage({
         type: 'WARMUP_RESULT',
         data: {
           detections: detections,

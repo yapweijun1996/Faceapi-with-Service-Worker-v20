@@ -17,17 +17,23 @@ const FaceDetectorOptionsDefault = new faceapi.TinyFaceDetectorOptions({
 });
 let faceDetectorOptions = FaceDetectorOptionsDefault;
 
-async function loadModels(client) {
+async function loadModels() {
   await faceapi.nets.tinyFaceDetector.loadFromUri('../models');
   await faceapi.nets.faceLandmark68Net.loadFromUri('../models');
   await faceapi.nets.faceRecognitionNet.loadFromUri('../models');
   isModelLoaded = true;
-  client.postMessage({ type: 'MODELS_LOADED' });
+  self.postMessage({ type: 'MODELS_LOADED' });
 }
 
 async function detectFaces(imageData, width, height) {
   if (!isModelLoaded) {
     console.warn('WebWorker: Models not loaded yet');
+    return [null, []];
+  }
+
+  // Guard against invalid dimensions
+  if (!width || !height) {
+    console.error('WebWorker: Invalid dimensions for OffscreenCanvas');
     return [null, []];
   }
 
@@ -70,7 +76,7 @@ self.onmessage = async (event) => {
 
   switch (type) {
     case 'LOAD_MODELS':
-      await loadModels(self);
+      await loadModels();
       break;
     case 'DETECT_FACES': {
       const result = await detectFaces(imageData, width, height);

@@ -18,10 +18,11 @@ The application operates entirely on the client-side, comprising three key compo
 
 ### 3.1. Pre-warming Strategy
 
-*   **Goal**: To minimize loading times on the registration and verification pages by pre-loading the `face-api.js` models in the background.
+*   **Goal**: To eliminate any loading lag on feature pages by ensuring `face-api.js` models are fully loaded and initialized *before* the user can interact with camera features.
 *   **UX Flow**:
-    1.  When a user visits `index.html`, model loading begins automatically. A non-blocking overlay indicates that the application is getting ready.
-    2.  By the time the user navigates to a feature page, the models are already loaded, providing a near-instant experience.
+    1.  When the application starts, a loading overlay is displayed. In the background, the system initializes the worker, loads the required models, and performs a "warmup" detection on a static image.
+    2.  The loading overlay remains visible until this entire process is complete.
+    3.  Once ready, the overlay is hidden. This guarantees that when the user navigates to a feature page, the experience is instant and free of any model-loading delays.
 *   **Technical Implementation**:
     *   A global `initFaceApi()` function in `faceapi_warmup.js` centralizes the worker and model initialization logic.
     *   This function is called on `DOMContentLoaded` in `index.html`.
@@ -100,21 +101,25 @@ After initial development, several key issues were identified and resolved to im
     *   **Problem**: The UI was blocked while models were loading.
     *   **Solution**: A non-blocking loading modal was added, allowing users to interact with the page while models load in the background.
 
-6.  **Robust Fallback for iOS and Timeouts**:
+6.  **Robust Model Loading and Warmup Flow**:
+    *   **Problem**: The loading overlay was previously hidden as soon as the models were downloaded, but before the essential warmup process was complete. This could cause a lag or UI freeze if the user tried to start the camera immediately.
+    *   **Solution**: The initialization logic was refactored to be fully sequential and event-driven. The loading overlay now remains visible until **both** the models are loaded **and** the static image warmup has successfully completed. This guarantees that the `face-api.js` engine is 100% ready before the user can interact with any camera-dependent features, ensuring a smoother experience.
+
+7.  **Robust Fallback for iOS and Timeouts**:
     *   **Problem**: The app would hang on iOS and other environments with unreliable Service Worker support.
     *   **Solution**: A 15-second timeout was added to the Service Worker initialization, and specific checks for iOS were implemented to force an immediate fallback to the Web Worker.
 
-7.  **`OffscreenCanvas` TypeError in Web Worker**:
+8.  **`OffscreenCanvas` TypeError in Web Worker**:
     *   **Problem**: The Web Worker fallback failed with an `OffscreenCanvas` constructor error.
     *   **Solution**: The `triggerImageWarmup` function was fixed to send the correct image `width` and `height` to the worker, resolving the error.
 
-8.  **Worker Initialization Hang on Registration Page**:
+9.  **Worker Initialization Hang on Registration Page**:
     *   **Problem**: The application would get stuck on the loading screen on `face_register.html` because the worker initialization logic was not robust enough to handle silent failures.
     *   **Solution**: The `initFaceApi` function was refactored to use a `try...catch` block instead of `Promise.race`, ensuring that any failure in the Service Worker initialization reliably triggers the Web Worker fallback.
 
-9.  **Improved Navigation Flow**:
+10. **Improved Navigation Flow**:
     *   **Problem**: Users had no direct way to return to the main page from the registration or verification flows, and were not automatically redirected after completion.
-    *   **Solution**: Added a "Go to Index" link on both `face_register.html` and `face_verify.html`. Implemented automatic redirection to `index.html` after a successful registration or verification to create a smoother user journey.
+    *   **Solution**: The "Cancel" button on both registration and verification pages now redirects the user to `index.html`, providing a clear exit path. The standalone "Go to Index" links were removed to create a cleaner, full-screen UI, especially on mobile devices. Automatic redirection after successful completion remains.
 
 ---
 

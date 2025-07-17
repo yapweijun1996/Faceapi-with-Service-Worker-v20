@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Management - Face Verification</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .user-list { list-style: none; padding: 0; }
+        .user-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #ccc; }
+        .user-item:last-child { border-bottom: none; }
+        .user-info { text-align: left; }
+        .actions button { margin-left: 10px; }
+        .back-link { margin-top: 20px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Profile Management</h1>
+        <div id="user-list-container">
+            <ul id="user-list" class="user-list">
+                <!-- User profiles will be dynamically inserted here -->
+            </ul>
+        </div>
+        <a href="index.html" class="back-link">Back to Main Menu</a>
+    </div>
+
+    <script src="js/face-api.min.js"></script>
+    <script src="js/faceapi_warmup.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initDB();
+            await loadUsers();
+        });
+
+        async function loadUsers() {
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = ''; // Clear existing list
+            try {
+                const users = await getAllUsers();
+                if (users.length === 0) {
+                    userList.innerHTML = '<li>No profiles registered yet.</li>';
+                    return;
+                }
+                users.forEach(user => {
+                    const li = document.createElement('li');
+                    li.className = 'user-item';
+                    li.dataset.userId = user.id;
+
+                    const userInfo = document.createElement('div');
+                    userInfo.className = 'user-info';
+                    userInfo.innerHTML = `<strong>${user.name}</strong> (ID: ${user.id})`;
+
+                    const actions = document.createElement('div');
+                    actions.className = 'actions';
+
+                    const editButton = document.createElement('button');
+                    editButton.textContent = 'Edit';
+                    editButton.onclick = () => handleEdit(user.id, user.name);
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = 'Delete';
+                    deleteButton.onclick = () => handleDelete(user.id);
+
+                    actions.appendChild(editButton);
+                    actions.appendChild(deleteButton);
+                    li.appendChild(userInfo);
+                    li.appendChild(actions);
+                    userList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('Failed to load users:', error);
+                userList.innerHTML = '<li>Error loading profiles.</li>';
+            }
+        }
+
+        async function handleDelete(userId) {
+            if (confirm(`Are you sure you want to delete user ${userId}? This cannot be undone.`)) {
+                try {
+                    await deleteUser(userId);
+                    alert('User deleted successfully.');
+                    await loadUsers(); // Refresh the list
+                } catch (error) {
+                    console.error('Failed to delete user:', error);
+                    alert('Error deleting user.');
+                }
+            }
+        }
+
+        async function handleEdit(userId, currentName) {
+            const newName = prompt(`Enter new name for user ${userId}:`, currentName);
+            if (newName && newName.trim() !== '') {
+                try {
+                    await updateUser(userId, newName.trim());
+                    alert('User updated successfully.');
+                    await loadUsers(); // Refresh the list
+                } catch (error) {
+                    console.error('Failed to update user:', error);
+                    alert('Error updating user.');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

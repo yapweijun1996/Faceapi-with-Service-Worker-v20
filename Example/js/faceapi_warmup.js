@@ -74,78 +74,149 @@ var verificationResults = [];
 var multiple_face_detection_yn = "y";
 
 // ---------------------------------------------------------------------------
-// IndexedDB Integration for Persistent Storage
+// Persisting registration progress
 // ---------------------------------------------------------------------------
-// We use IndexedDB to store user profiles (ID, name, and face descriptors)
-// persistently in the browser. This avoids the need for manual file handling
-// and creates a more seamless experience.
+// Captured descriptors and thumbnails are stored in IndexedDB so that a user can
+// refresh the page or come back later without losing their partially completed
+// registration.  The helpers below handle saving/loading that state.
 
-const DB_NAME = 'faceDatabase';
-const DB_VERSION = 1;
-const STORE_NAME = 'users';
+async function openProgressDB() {
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.open('FaceRegProgressDB', 1);
+		request.onupgradeneeded = e => {
+			const db = e.target.result;
+			if (!db.objectStoreNames.contains('progress')) {
+				db.createObjectStore('progress', { keyPath: 'id' });
+			}
+		};
+		request.onsuccess = e => resolve(e.target.result);
+		request.onerror = e => reject(e.target.error);
+	});
+}
+
+function saveProgress() {
+	const data = {
+		id: currentUserId,
+		name: currentUserName,
+		descriptors: currentUserDescriptors.map(d => Array.from(d)),
+		frames: capturedFrames
+	};
+	openProgressDB().then(db => {
+		const tx = db.transaction('progress', 'readwrite');
+		tx.objectStore('progress').put({ id: 'current', data });
+	}).catch(e => console.warn('Failed to save progress', e));
+}
+
+function loadProgress() {
+	openProgressDB().then(db => {
+		const tx = db.transaction('progress', 'readonly');
+		const req = tx.objectStore('progress').get('current');
+		req.onsuccess = () => {
+			const record = req.result;
+			if (!record || !record.data || !Array.isArray(record.data.descriptors)) return;
+			const data = record.data;
+			currentUserId = data.id || '';
+			currentUserName = data.name || '';
+			currentUserDescriptors = data.descriptors.map(arr => new Float32Array(arr));
+			capturedFrames = Array.isArray(data.frames) ? data.frames : [];
+			const idInput = document.getElementById('userIdInput');
+			const nameInput = document.getElementById('userNameInput');
+			if (idInput) idInput.value = currentUserId;
+			if (nameInput) nameInput.value = currentUserName;
+			capturedFrames.forEach(url => addCapturePreview(url));
+			updateProgress();
+		};
+	}).catch(e => console.warn('Failed to load progress', e));
+}
+
+function clearProgress() {
+	openProgressDB().then(db => {
+		const tx = db.transaction('progress', 'readwrite');
+		tx.objectStore('progress').delete('current');
+	}).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Persisting user profiles to IndexedDB
+// ---------------------------------------------------------------------------
 let db;
 
 async function initDB() {
-	return new Promise((resolve, reject) => {
-		const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-		request.onupgradeneeded = (event) => {
-			const db = event.target.result;
-			if (!db.objectStoreNames.contains(STORE_NAME)) {
-				db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-			}
-		};
-
-		request.onsuccess = (event) => {
-			db = event.target.result;
-			resolve(db);
-		};
-
-		request.onerror = (event) => {
-			console.error('IndexedDB error:', event.target.error);
-			reject(event.target.error);
-		};
-	});
+    return new Promise((resolve, reject) => {
+        if (db) {
+            return resolve(db);
+        }
+        const request = indexedDB.open('UserDB', 1);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('users')) {
+                db.createObjectStore('users', { keyPath: 'id' });
+            }
+        };
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            resolve(db);
+        };
+        request.onerror = (event) => {
+            console.error('Database error:', event.target.error);
+            reject(event.target.error);
+        };
+    });
 }
 
 async function saveUser(user) {
-	if (!db) await initDB();
-	return new Promise((resolve, reject) => {
-		const transaction = db.transaction([STORE_NAME], 'readwrite');
-		const store = transaction.objectStore(STORE_NAME);
-		const request = store.put(user);
-
-		request.onsuccess = () => resolve();
-		request.onerror = (event) => {
-			console.error('Failed to save user:', event.target.error);
-			reject(event.target.error);
-		};
-	});
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readwrite');
+        const store = transaction.objectStore('users');
+        const request = store.put(user);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error saving user: ' + event.target.error);
+    });
 }
 
 async function getAllUsers() {
-	if (!db) await initDB();
-	return new Promise((resolve, reject) => {
-		const transaction = db.transaction([STORE_NAME], 'readonly');
-		const store = transaction.objectStore(STORE_NAME);
-		const request = store.getAll();
-
-		request.onsuccess = (event) => {
-			resolve(event.target.result);
-		};
-
-		request.onerror = (event) => {
-			console.error('Failed to get all users:', event.target.error);
-			reject(event.target.error);
-		};
-	});
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readonly');
+        const store = transaction.objectStore('users');
+        const request = store.getAll();
+        request.onsuccess = (event) => resolve(event.target.result);
+        request.onerror = (event) => reject('Error getting all users: ' + event.target.error);
+    });
 }
 
-// The functions saveProgress, loadProgress, and clearProgress are now obsolete
-// and will be removed. The new IndexedDB helpers above will be used instead.
-function saveProgress() { /* no-op */ }
-function loadProgress() { /* no-op */ }
-function clearProgress() { /* no-op */ }
+async function deleteUser(userId) {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readwrite');
+        const store = transaction.objectStore('users');
+        const request = store.delete(userId);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error deleting user: ' + event.target.error);
+    });
+}
+
+async function updateUser(userId, newName) {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readwrite');
+        const store = transaction.objectStore('users');
+        const request = store.get(userId);
+        request.onerror = (event) => reject('Error finding user: ' + event.target.error);
+        request.onsuccess = (event) => {
+            const user = event.target.result;
+            if (user) {
+                user.name = newName;
+                const updateRequest = store.put(user);
+                updateRequest.onsuccess = () => resolve();
+                updateRequest.onerror = (event) => reject('Error updating user: ' + event.target.error);
+            } else {
+                reject('User not found');
+            }
+        };
+    });
+}
 
 // Adjust detection options for low-end devices
 function adjustDetectionForDevice() {
@@ -331,6 +402,7 @@ function cancelRegistration() {
 	clear_all_canvases();
 	const container = document.querySelector('.face-detection-container');
 	if (container) container.style.display = 'none';
+	window.location.href = 'index.html';
 }
 
 function restartVerification() {
@@ -367,6 +439,7 @@ function cancelVerification() {
 	// Only clear the canvas overlays and stop the camera so the
 	// user can restart verification later if desired.
 	clear_all_canvases();
+	window.location.href = 'index.html';
 }
 
 function populateUserFaceIdTextarea() {
@@ -1155,18 +1228,39 @@ function faceapi_register(descriptor) {
 		bestCandidateMinDist = 0;
 		// Check if registration is complete
 		if (currentUserDescriptors.length >= maxCaptures) {
-			alert("Registration completed for user: " + currentUserName + " (" + currentUserId + ")");
 			registrationCompleted = true;
 			stopRegistrationTimer();
 			faceapi_action = null;
 			camera_stop();
 			clear_all_canvases();
-			const container = document.getElementById('progressContainer');
-			if (container) container.classList.add('expanded');
-			populateUserFaceIdTextarea();
-			const downloadBtn = document.getElementById('downloadBtn');
-			if (downloadBtn) downloadBtn.style.display = 'inline-block';
-			updateProgress();
+			
+			const meanDescriptor = computeMeanDescriptor(currentUserDescriptors);
+			const user = {
+				id: currentUserId,
+				name: currentUserName,
+				descriptors: [
+					...currentUserDescriptors.map(d => Array.from(d)),
+					Array.from(meanDescriptor)
+				]
+			};
+
+			saveUser(user).then(() => {
+				alert("Registration completed and saved for user: " + currentUserName + " (" + currentUserId + ")");
+				// Optionally clear progress after successful save
+				clearProgress();
+				// Hide registration UI elements and show success message
+				const container = document.getElementById('progressContainer');
+				if (container) container.classList.add('expanded');
+				const downloadBtn = document.getElementById('downloadBtn');
+				if (downloadBtn) downloadBtn.style.display = 'none'; // No more download
+				updateProgress();
+				setTimeout(() => {
+					window.location.href = 'index.html';
+				}, 2000);
+			}).catch(err => {
+				console.error(err);
+				showMessage('error', 'Failed to save user profile.');
+			});
 		}
 	}
 }
@@ -1508,27 +1602,72 @@ async function startWebWorker() {
     }
 }
 
+// Global init function for face-api
+async function initFaceApi() {
+    if (isWorkerReady) {
+        console.log("Face API already initialized or in progress.");
+        return faceApiReadyPromise;
+    }
+    console.log("Initializing Face API...");
+    showLoadingOverlay();
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const swSupported = 'serviceWorker' in navigator;
+    const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
+
+    // Prefer Service Worker, but have a robust fallback
+    if (swSupported && offscreenSupported && !isIOS) {
+        console.log("Attempting to initialize with Service Worker.");
+        try {
+            await initWorker();
+            console.log("Service Worker initialized successfully.");
+        } catch (error) {
+            console.error("Service Worker initialization failed. Falling back to Web Worker.", error);
+            await startWebWorker();
+        }
+    } else {
+        let reason = !swSupported ? "ServiceWorker not supported" :
+                     !offscreenSupported ? "OffscreenCanvas not supported" :
+                     "iOS detected";
+        console.warn(`${reason}. Forcing Web Worker fallback.`);
+        await startWebWorker();
+    }
+    return faceApiReadyPromise;
+}
+
 // Initialize either service worker or fallback to web worker
 document.addEventListener("DOMContentLoaded", async function(event) {
+    // On pages that need face-api, we call initFaceApi and wait for it to complete.
+    // On index.html, it's called but we don't wait, allowing it to load in the background.
+    if (window.location.pathname.endsWith('face_register.html') || window.location.pathname.endsWith('face_verify.html') || window.location.pathname.endsWith('profile_management.html')) {
+        try {
+            await initFaceApi();
+            console.log("Face API is ready, proceeding with page setup.");
+        } catch (error) {
+            console.error("Failed to initialize Face API for the page:", error);
+            // Optionally, show an error message to the user
+        }
+    }
+
 	clearProgress();
 	loadProgress();
 	adjustDetectionForDevice();
-	console.log("DOMContentLoaded - checking Service Worker support");
+	
+	// Add ResizeObserver to keep canvas overlays aligned with the video
+    const video = document.getElementById(videoId);
+    if (video) {
+        const observer = new ResizeObserver(() => {
+            const overlays = [canvasId, canvasId2, canvasId3].map(id => document.getElementById(id));
+            overlays.forEach(canvas => {
+                if (canvas) {
+                    canvas.width = video.clientWidth;
+                    canvas.height = video.clientHeight;
+                }
+            });
+        });
+        observer.observe(video);
+    }
 
-	const swSupported = 'serviceWorker' in navigator;
-	const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
-
-	if (swSupported && offscreenSupported) {
-		try {
-			await initWorker();
-		} catch (e) {
-			console.warn("Service Worker initialization failed, falling back to Web Worker", e);
-			await startWebWorker();
-		}
-	} else {
-		console.warn("Service Worker not supported, using Web Worker fallback.");
-		await startWebWorker();
-	}
 	updateProgress();
 	updateVerifyProgress();
 	const retake = document.getElementById('retakeBtn');

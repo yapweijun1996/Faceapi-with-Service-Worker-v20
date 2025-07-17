@@ -1340,12 +1340,9 @@ function handleWorkerMessage(event) {
     console.log('Received message from worker:', event.data.type);
     switch (event.data.type) {
         case 'MODELS_LOADED':
-            console.log('Face detection models loaded by worker.');
-            isFaceApiReady = true;
-            if (typeof resolveFaceApiReady === 'function') {
-                resolveFaceApiReady();
-            }
-            hideLoadingOverlay();
+            console.log('Face detection models loaded by worker. Starting warmup...');
+            // Models are loaded, now trigger the warmup process.
+            // The UI loader will remain visible until the warmup is also complete.
             faceapi_warmup();
             break;
         case 'DETECTION_RESULT':
@@ -1412,10 +1409,14 @@ function handleWorkerMessage(event) {
             }
             break;
         case 'WARMUP_RESULT':
-            console.log('Warmup completed by worker.');
-            if (typeof warmup_completed !== 'undefined' && Array.isArray(warmup_completed)) {
-                warmup_completed.forEach(func => func());
+            console.log('Warmup completed by worker. Face API is now fully ready.');
+            // Now that models are loaded and warmed up, the API is ready.
+            isFaceApiReady = true;
+            if (typeof resolveFaceApiReady === 'function') {
+                resolveFaceApiReady();
             }
+            // Hide the loading overlay as the final step.
+            hideLoadingOverlay();
             break;
         default:
             console.log('Unknown message type from worker:', event.data.type);
@@ -1520,14 +1521,10 @@ async function initWorker() {
 			await load_model(); // Wait for the model to load
 			
 			isWorkerReady = true; // Set the worker as ready
-			isFaceApiReady = true;
-			if (typeof resolveFaceApiReady === 'function') {
-				resolveFaceApiReady();
-			}
-			hideLoadingOverlay();
-			console.log("Worker initialized successfully.");
+			console.log("Worker initialized successfully. Waiting for model and warmup confirmation...");
 		} catch (error) {
 			console.error("Error initializing worker:", error);
+			hideLoadingOverlay(); // Hide loader on failure
 		}
 	} else {
 		console.error('Service workers are not supported in this browser.');
