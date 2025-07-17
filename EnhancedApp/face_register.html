@@ -493,14 +493,16 @@
 				<button onclick="hideTimeoutOverlay(); cancelRegistration()">Cancel</button>
 			</div>
 		</div>
-		<div style="display:none;">
-			<h1>Face Detection</h1>
-			<a href="#" onclick="urlReplace('index.html')">Go to Index</a><br>
-			<input type="file" id="jsonFileInput" accept=".json" onchange="handleJsonFileInput(event)" multiple>
-			<textarea class="user_face_id_json" style="display:none;"></textarea>
-			<!-- Add user ID and name inputs -->
-			<label>User ID: <input type="text" id="userIdInput" placeholder="Enter user ID"></label>
-			<label>User Name: <input type="text" id="userNameInput" placeholder="Enter user name"></label><br>
+		<div style="text-align: center; margin-top: 1rem;">
+			<h1>Face Registration</h1>
+			<a href="index.html">Go to Index</a><br>
+			<div style="display:none;">
+				<input type="file" id="jsonFileInput" accept=".json" onchange="handleJsonFileInput(event)" multiple>
+				<textarea class="user_face_id_json" style="display:none;"></textarea>
+				<!-- Add user ID and name inputs -->
+				<label>User ID: <input type="text" id="userIdInput" placeholder="Enter user ID"></label>
+				<label>User Name: <input type="text" id="userNameInput" placeholder="Enter user name"></label><br>
+			</div>
 		</div>
 		<div id="progressContainer" class="controls">
 			<span id="progressText">0/20 captures</span>

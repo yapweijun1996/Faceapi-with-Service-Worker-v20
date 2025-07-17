@@ -1252,6 +1252,9 @@ function faceapi_register(descriptor) {
 				const downloadBtn = document.getElementById('downloadBtn');
 				if (downloadBtn) downloadBtn.style.display = 'none'; // No more download
 				updateProgress();
+				setTimeout(() => {
+					window.location.href = 'index.html';
+				}, 2000);
 			}).catch(err => {
 				console.error(err);
 				showMessage('error', 'Failed to save user profile.');
