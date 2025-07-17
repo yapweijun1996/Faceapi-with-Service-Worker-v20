@@ -1428,13 +1428,27 @@ function handleWorkerMessage(event) {
             break;
         case 'WARMUP_RESULT':
             log.info('[Worker] Warmup completed. Face API is now fully ready.');
-            // Now that models are loaded and warmed up, the API is ready.
+            if (isFaceApiReady) {
+                log.debug('Face API already marked as ready, skipping duplicate warmup completion.');
+                return;
+            }
             isFaceApiReady = true;
             if (typeof resolveFaceApiReady === 'function') {
                 resolveFaceApiReady();
             }
-            // Hide the loading overlay as the final step.
-            hideLoadingOverlay();
+
+            // Execute all functions queued for after warmup
+            if (typeof warmup_completed !== 'undefined' && Array.isArray(warmup_completed)) {
+                log.info(`Executing ${warmup_completed.length} post-warmup functions.`);
+                warmup_completed.forEach(fn => {
+                    if (typeof fn === 'function') {
+                        fn();
+                    }
+                });
+            } else {
+                // Fallback for pages without a queue
+                hideLoadingOverlay();
+            }
             break;
         default:
             log.warn(`[Worker] Received unknown message type: ${event.data.type}`);
