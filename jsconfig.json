@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["EnhancedApp/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist"]
+}

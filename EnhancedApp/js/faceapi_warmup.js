@@ -20,22 +20,22 @@
 * while the underlying video feed is paused.  Progress is persisted in
 * IndexedDB so a partially completed registration survives a page reload.
 */
-var videoId = "video";
+var videoId = 'video';
 /**
 * ID of the hidden canvas used for capturing raw video frames for inference.
 * @type {string}
 */
-var canvasId = "canvas";
-var canvasId2 = "canvas2";
-var canvasId3 = "canvas3";
+var canvasId = 'canvas';
+var canvasId2 = 'canvas2';
+var canvasId3 = 'canvas3';
 /**
 * ID of the snapshot canvas used to display the detected face image with confidence percentage.
 * @type {string}
 */
-var canvasOutputId = "canvas_output";
-var step_fps = 16.67 ; // 1000 / 16.67 = 60 FPS
-var vle_face_landmark_position_yn = "y" ; // y / n
-var vle_facebox_yn = "y" ; // y / n
+var canvasOutputId = 'canvas_output';
+var step_fps = 16.67; // 1000 / 16.67 = 60 FPS
+var vle_face_landmark_position_yn = 'y'; // y / n
+var vle_facebox_yn = 'y'; // y / n
 
 
 var isWorkerReady = false;
@@ -45,12 +45,12 @@ var resolveFaceApiReady;
 faceApiReadyPromise = new Promise(resolve => {
     resolveFaceApiReady = resolve;
 });
-var worker = "";
-var serviceWorkerFileName = "faceDetectionServiceWorker.js";
-var serviceWorkerFilePath = "./js/faceDetectionServiceWorker.js";
-var imgFaceFilePathForWarmup = "./models/face_for_loading.png";
+var worker = '';
+var serviceWorkerFileName = 'faceDetectionServiceWorker.js';
+var serviceWorkerFilePath = './js/faceDetectionServiceWorker.js';
+var imgFaceFilePathForWarmup = './models/face_for_loading.png';
 
-if(typeof face_detector_options_setup === "undefined" || face_detector_options_setup === "undefined"){
+if(typeof face_detector_options_setup === 'undefined' || face_detector_options_setup === 'undefined'){
 	var face_detector_options_setup = {
 		inputSize: 128,
 		scoreThreshold: 0.1,
@@ -70,8 +70,8 @@ var flatRegisteredDescriptors = [];
 var flatRegisteredUserMeta = [];
 var lastLoadedVerificationJson = '';
 var verificationResults = [];
-// Flag to allow multiple face detection ("y" = allow multiple, else single)
-var multiple_face_detection_yn = "y";
+// Flag to allow multiple face detection ('y' = allow multiple, else single)
+var multiple_face_detection_yn = 'y';
 
 // ---------------------------------------------------------------------------
 // IndexedDB Integration for Persistent Storage
@@ -794,7 +794,7 @@ function video_face_detection() {
 	var video = document.getElementById(videoId);
 	var canvas = document.getElementById(canvasId);
 	canvas.willReadFrequently = true;
-	var context = canvas.getContext("2d");
+	var context = canvas.getContext('2d');
 	context.willReadFrequently = true;
 	
 	video.addEventListener('play', () => {
