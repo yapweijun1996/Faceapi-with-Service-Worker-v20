@@ -1380,10 +1380,10 @@ async function faceapi_warmup() {
     });
 
     // Trigger a dummy detection using a static image
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ type: 'WARMUP_WITH_IMAGE' });
+    if (worker) {
+        worker.postMessage({ type: 'WARMUP_WITH_IMAGE' });
     } else {
-        console.error("Service worker controller not available for warmup.");
+        console.error("Worker not available for warmup.");
         updateModelStatus('Initialization error.', true);
         isWarmingUp = false; // Reset flag on error
         return;
