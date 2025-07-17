@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Face Verification</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#FF9800">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 1rem; display: flex; flex-direction: column; align-items: center; }
+        h1 { color: #333; }
+        .container { max-width: 640px; width: 100%; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .video-container { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 8px; overflow: hidden; margin-top: 1rem; }
+        video, .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+        .overlay { z-index: 10; }
+        .controls { margin-top: 1rem; display: flex; justify-content: center; gap: 1rem; }
+        button { padding: 0.75rem 1.5rem; font-size: 1rem; border: none; border-radius: 4px; cursor: pointer; background-color: #FF9800; color: white; }
+        .user-list { list-style: none; padding: 0; margin-top: 1rem; }
+        .user-list li { padding: 0.5rem; border-bottom: 1px solid #eee; }
+        .user-list li.verified { background-color: #d4edda; color: #155724; font-weight: bold; }
+        .message { margin-top: 1rem; text-align: center; font-weight: bold; }
+        #loadingOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); color: #fff; display: flex; justify-content: center; align-items: center; text-align: center; z-index: 10006; flex-direction: column; gap: 1rem; }
+        .spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Loading models and user data...</p>
+    </div>
+
+    <div class="container">
+        <h1>Face Verification</h1>
+        <p>Look at the camera to verify registered users.</p>
+
+        <div class="video-container">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="canvas" class="overlay" style="display:none;"></canvas>
+            <canvas id="canvas2" class="overlay"></canvas>
+            <canvas id="canvas3" class="overlay"></canvas>
+        </div>
+
+        <div id="verificationStatus" class="message">Loading users...</div>
+        <ul id="userList" class="user-list"></ul>
+
+        <div class="controls">
+            <button id="restartBtn">Restart Verification</button>
+        </div>
+    </div>
+
+    <!-- Hidden canvas for processing -->
+    <canvas id="canvas_output" style="display:none;"></canvas>
+
+    <!-- Core libraries -->
+    <script src="./js/face-api.min.js"></script>
+    <script src="./js/faceapi_warmup.js"></script>
+
+    <script>
+        // --- DOM Elements ---
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const statusEl = document.getElementById('verificationStatus');
+        const userListEl = document.getElementById('userList');
+        const restartBtn = document.getElementById('restartBtn');
+
+        // --- App State ---
+        let allUsers = [];
+
+        // --- Event Listeners ---
+        restartBtn.addEventListener('click', restartVerification);
+
+        /**
+         * Initializes the verification page.
+         * Loads users from IndexedDB and starts the camera.
+         */
+        async function initializeVerification() {
+            await faceApiReadyPromise; // Wait for models to be loaded
+            
+            try {
+                allUsers = await getAllUsers();
+                if (allUsers.length === 0) {
+                    statusEl.innerText = 'No users registered. Please register a user first.';
+                    loadingOverlay.style.display = 'none';
+                    return;
+                }
+
+                // Populate the UI with the list of users
+                populateUserList();
+                
+                // Prepare face-api.js for verification
+                prepareVerification();
+
+                // Hide loading overlay and start camera
+                loadingOverlay.style.display = 'none';
+                await camera_start();
+                video_face_detection();
+
+            } catch (error) {
+                console.error('Initialization failed:', error);
+                statusEl.innerText = 'Error loading user data.';
+                loadingOverlay.style.display = 'none';
+            }
+        }
+
+        /**
+         * Populates the user list in the UI.
+         */
+        function populateUserList() {
+            userListEl.innerHTML = '';
+            allUsers.forEach(user => {
+                const li = document.createElement('li');
+                li.id = `user-${user.id}`;
+                li.innerText = `${user.name} (Status: Pending)`;
+                userListEl.appendChild(li);
+            });
+        }
+
+        /**
+         * Prepares the global variables needed for the verification process.
+         */
+        function prepareVerification() {
+            faceapi_action = 'verify';
+            registeredUsers = allUsers;
+            flatRegisteredDescriptors = [];
+            flatRegisteredUserMeta = [];
+            
+            registeredUsers.forEach(user => {
+                user.descriptors.forEach(descArr => {
+                    flatRegisteredDescriptors.push(new Float32Array(descArr));
+                    flatRegisteredUserMeta.push({ id: user.id, name: user.name });
+                });
+            });
+            
+            verifiedUserIds = new Set();
+            updateVerificationStatus();
+        }
+
+        /**
+         * Restarts the verification process.
+         */
+        function restartVerification() {
+            verifiedUserIds.clear();
+            populateUserList(); // Reset the UI list
+            updateVerificationStatus();
+            
+            if (!video.srcObject) {
+                camera_start().then(video_face_detection);
+            }
+        }
+
+        /**
+         * Updates the verification status message and the user list UI.
+         * This function is called from faceapi_verify in the warmup script.
+         */
+        function updateVerificationStatus() {
+            const verifiedCount = verifiedUserIds.size;
+            const totalCount = registeredUsers.length;
+            statusEl.innerText = `Verified: ${verifiedCount} / ${totalCount}`;
+
+            // Update individual user status in the list
+            registeredUsers.forEach(user => {
+                const li = document.getElementById(`user-${user.id}`);
+                if (li) {
+                    if (verifiedUserIds.has(user.id)) {
+                        li.innerText = `${user.name} (Status: Verified)`;
+                        li.classList.add('verified');
+                    } else {
+                        li.innerText = `${user.name} (Status: Pending)`;
+                        li.classList.remove('verified');
+                    }
+                }
+            });
+        }
+        
+        /**
+         * Override faceapi_verify to update our new UI
+         */
+        async function faceapi_verify(descriptor) {
+            if (!descriptor || verificationCompleted) return;
+
+            const faceMatcher = new faceapi.FaceMatcher(flatRegisteredDescriptors);
+            const bestMatch = faceMatcher.findBestMatch(descriptor);
+
+            if (bestMatch.label !== 'unknown') {
+                const matchedUser = flatRegisteredUserMeta.find(u => u.name === bestMatch.label);
+                if (matchedUser && !verifiedUserIds.has(matchedUser.id)) {
+                    verifiedUserIds.add(matchedUser.id);
+                    updateVerificationStatus();
+                }
+            }
+        }
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', initializeVerification);
+
+    </script>
+</body>
+</html>
