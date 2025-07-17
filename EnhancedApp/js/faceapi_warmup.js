@@ -1266,13 +1266,6 @@ function handleWorkerMessage(event) {
                 requestAnimationFrame(videoDetectionStep);
             }
             break;
-        case 'WARMUP_RESULT':
-            console.log('Warmup completed by worker.');
-            updateModelStatus('Ready.');
-            if (typeof warmup_completed !== 'undefined' && Array.isArray(warmup_completed)) {
-                warmup_completed.forEach(func => func());
-            }
-            break;
         default:
             console.log('Unknown message type from worker:', event.data.type);
     }
@@ -1370,39 +1363,27 @@ async function faceapi_warmup() {
     isWarmingUp = true;
     updateModelStatus('Warming up: Verifying models with static image...');
 
-    // We need to wait for the first successful detection using a static image.
-    // This confirms the model is functional without requiring immediate camera access.
     const warmupDetectionPromise = new Promise((resolve, reject) => {
-        const originalHandler = handleWorkerMessage;
-        let warmupTimeout;
-
-        const cleanup = () => {
-            clearTimeout(warmupTimeout);
-            handleWorkerMessage = originalHandler;
-        };
-
-        warmupTimeout = setTimeout(() => {
-            console.error('Warmup timed out. Worker did not respond.');
-            updateModelStatus('Warmup failed. Please reload.', true);
-            cleanup();
-            reject(new Error('Warmup timed out'));
+        const warmupTimeout = setTimeout(() => {
+            reject(new Error('Warmup timed out. Worker did not respond.'));
         }, 10000); // 10-second timeout
 
-        handleWorkerMessage = (event) => {
-            // We still want the original handler to process other messages
-            originalHandler(event);
+        const onMessage = (event) => {
             if (event.data.type === 'WARMUP_RESULT') {
-                cleanup();
+                clearTimeout(warmupTimeout);
+                navigator.serviceWorker.removeEventListener('message', onMessage);
                 resolve();
             }
         };
+
+        navigator.serviceWorker.addEventListener('message', onMessage);
     });
 
     // Trigger a dummy detection using a static image
-    if (worker) {
-        worker.postMessage({ type: 'WARMUP_WITH_IMAGE' });
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'WARMUP_WITH_IMAGE' });
     } else {
-        console.error("Worker not available for warmup.");
+        console.error("Service worker controller not available for warmup.");
         updateModelStatus('Initialization error.', true);
         isWarmingUp = false; // Reset flag on error
         return;
@@ -1418,7 +1399,7 @@ async function faceapi_warmup() {
         }
     } catch (error) {
         console.error('Face API warmup failed:', error);
-        // The status is already updated by the timeout handler
+        updateModelStatus('Warmup failed. Please reload.', true);
     } finally {
         isWarmingUp = false;
     }
