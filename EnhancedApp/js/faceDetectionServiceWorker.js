@@ -1,4 +1,7 @@
 // faceDetectionServiceWorker.js
+const SW_VERSION = '1.0.1';
+console.log(`Service Worker version ${SW_VERSION} started.`);
+
 importScripts('faceEnvWorkerPatch.js');
 importScripts('face-api.min.js');
 
@@ -81,6 +84,18 @@ async function detectFaces(imageData, width, height) {
 
 self.addEventListener('message', async function(event) {
   const { type, imageData, width, height, face_detector_options } = event.data;
+
+  // Handle PING separately to respond directly to the source client
+  if (type === 'PING') {
+    if (event.source) {
+      event.source.postMessage({ type: 'PONG' });
+    } else {
+      // Fallback for older browsers or contexts without event.source
+      broadcastMessage({ type: 'PONG' });
+    }
+    return;
+  }
+
   if (typeof face_detector_options === "undefined" || face_detector_options === "undefined") {
     face_for_loading_options = FaceDetectorOptionsDefault;
   } else {
@@ -112,11 +127,8 @@ self.addEventListener('message', async function(event) {
         }
       });
       break;
-    case 'PING':
-      broadcastMessage({ type: 'PONG' });
-      break;
     default:
-      console.log('Unknown message type:', type);
+      console.warn('Unknown message type received in Service Worker:', type);
   }
 });
 

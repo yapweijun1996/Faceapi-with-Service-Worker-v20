@@ -1437,19 +1437,27 @@ function handleWorkerMessage(event) {
                 hideLoadingOverlay();
             }
             break;
-        case 'PONG':
-            if (healthCheckResolver) {
-                healthCheckResolver.resolve("ok");
-                healthCheckResolver = null;
-            }
-            break;
         default:
             log.warn(`[Worker] Received unknown message type: ${event.data.type}`);
     }
 }
 
 async function initWorkerAddEventListener() {
-    navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
+    const messageHandler = (event) => {
+        // Don't handle PONG messages here, they are for the health check promise
+        if (event.data.type === 'PONG') {
+            if (healthCheckResolver) {
+                healthCheckResolver.resolve("ok");
+                healthCheckResolver = null;
+            }
+            return;
+        }
+        handleWorkerMessage(event);
+    };
+
+    // Ensure we don't add duplicate listeners
+    navigator.serviceWorker.removeEventListener('message', messageHandler);
+    navigator.serviceWorker.addEventListener('message', messageHandler);
 }
 
 async function workerRegistration() {
