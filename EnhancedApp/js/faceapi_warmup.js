@@ -1204,11 +1204,8 @@ function handleWorkerMessage(event) {
             break;
         case 'MODELS_LOADED':
             console.log('Face detection models loaded by worker.');
-            updateModelStatus('Models loaded. Warming up...');
-            isFaceApiReady = true;
-            if (typeof resolveFaceApiReady === 'function') {
-                resolveFaceApiReady();
-            }
+            updateModelStatus('Models loaded. Starting camera for warmup...');
+            // The new warmup process will handle setting isFaceApiReady.
             faceapi_warmup();
             break;
         case 'DETECTION_RESULT':
@@ -1359,227 +1356,113 @@ async function load_model() {
 	}
 }
 
-async function initWorker() {
-	if ('serviceWorker' in navigator) {
-		try {
-			updateModelStatus('Initializing worker...');
-			// Optionally uncomment if needed
-			// await unregisterAllServiceWorker();
-			
-			console.log("Registering service worker...");
-			await workerRegistration(); // Wait for worker registration
-			
-			console.log("Adding event listeners...");
-			await initWorkerAddEventListener(); // Wait for event listeners to be added
-			
-			console.log("Waiting for 500ms...");
-			await delay(500); // Wait to ensure the service worker is ready to receive messages.
-			
-			console.log("Loading models...");
-			updateModelStatus('Loading models...');
-			await load_model(); // Asynchronously start model loading
-			
-			isWorkerReady = true; // Mark worker as initialized
-			console.log("Worker initialized. Model loading is in progress.");
-		} catch (error) {
-			console.error("Error initializing worker:", error);
-            updateModelStatus('Error initializing worker.', true);
-		}
-	} else {
-		console.error('Service workers are not supported in this browser.');
-        updateModelStatus('Service workers not supported.', true);
-	}
-}
+/**
+ * Enhanced warm-up process.
+ * This function now ensures that models are loaded, the camera is active,
+ * and a first successful face detection has occurred before resolving the
+ * faceApiReadyPromise.
+ */
+async function faceapi_warmup() {
+    updateModelStatus('Warming up: Activating camera...');
+    await camera_start();
 
+    // We need to wait for the first successful detection.
+    // We'll create a new promise that resolves when the WARMUP_RESULT is received.
+    const warmupDetectionPromise = new Promise(resolve => {
+        const originalHandler = handleWorkerMessage;
+        handleWorkerMessage = (event) => {
+            // We still want the original handler to process other messages
+            originalHandler(event);
+            if (event.data.type === 'WARMUP_RESULT') {
+                // Restore the original handler and resolve our promise
+                handleWorkerMessage = originalHandler;
+                resolve();
+            }
+        };
+    });
 
-function faceapi_warmup() {
-    // The warmup is now just a simple ping to the worker to do a dummy detection.
-    // The image data is no longer needed from the client.
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ type: 'WARMUP_FACES' });
-    } else if (worker && typeof worker.postMessage === 'function') {
+    // Trigger a dummy detection
+    if (worker) {
         worker.postMessage({ type: 'WARMUP_FACES' });
     }
+
+    updateModelStatus('Warming up: Awaiting first detection...');
+    await warmupDetectionPromise;
+
+    console.log('Warmup complete: Models loaded, camera active, and first detection successful.');
+    updateModelStatus('Ready.');
+    isFaceApiReady = true;
+    if (typeof resolveFaceApiReady === 'function') {
+        resolveFaceApiReady();
+    }
+    // Stop the camera after warmup to save resources
+    camera_stop();
 }
 
-// Initialize the Web Worker fallback
+/**
+ * Initializes the Web Worker as a fallback.
+ * This is called if the Service Worker fails to initialize.
+ */
 async function startWebWorker() {
-    console.log("Service Worker not supported, falling back to Web Worker.");
-    showLoadingOverlay();
+    console.log("Service Worker failed. Falling back to Web Worker.");
+    updateModelStatus('Using Web Worker fallback...');
 
     if (window.Worker) {
         worker = new Worker('./js/faceDetectionWebWorker.js');
-
-        // Listen for messages from the Web Worker
-        worker.onmessage = (event) => {
-            // Use the same event listener logic as the Service Worker
-            handleWorkerMessage(event);
-        };
-
+        worker.onmessage = handleWorkerMessage;
         worker.onerror = (error) => {
             console.error("Web Worker error:", error);
-            hideLoadingOverlay();
-            showMessage('error', 'An error occurred with the Web Worker.');
+            updateModelStatus('Web Worker error.', true);
         };
-
-        // Start loading models in the Web Worker
         worker.postMessage({ type: 'LOAD_MODELS' });
     } else {
         console.error("Web Workers are not supported in this browser.");
-        hideLoadingOverlay();
-        showMessage('error', 'Face detection is not supported on this browser.');
+        updateModelStatus('Face detection not supported.', true);
     }
 }
 
-// Initialize either service worker or fallback to web worker
+/**
+ * Initializes the face detection API.
+ * It first tries to use a Service Worker for background processing.
+ * If that fails, it falls back to a standard Web Worker.
+ */
+async function initializeFaceApi() {
+    updateModelStatus('Initializing...');
+    const swSupported = 'serviceWorker' in navigator;
+    const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
+
+    if (swSupported && offscreenSupported) {
+        try {
+            console.log("Attempting to initialize Service Worker...");
+            const registration = await navigator.serviceWorker.register(serviceWorkerFilePath, { scope: './js/' });
+            
+            // Wait for the service worker to be active
+            await navigator.serviceWorker.ready;
+
+            worker = registration.active;
+            navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
+            
+            console.log("Service Worker is active. Loading models.");
+            updateModelStatus('Loading models via Service Worker...');
+            worker.postMessage({ type: 'LOAD_MODELS' });
+            isWorkerReady = true;
+
+        } catch (error) {
+            console.error("Service Worker initialization failed:", error);
+            await startWebWorker(); // Fallback to Web Worker
+        }
+    } else {
+        console.warn("Service Worker or OffscreenCanvas not supported. Using Web Worker fallback.");
+        await startWebWorker();
+    }
+}
+
+// --- App Initialization ---
 document.addEventListener("DOMContentLoaded", async function(event) {
-	clearProgress();
-	loadProgress();
-	adjustDetectionForDevice();
-	console.log("DOMContentLoaded - checking Service Worker support");
-
-	const swSupported = 'serviceWorker' in navigator;
-	const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
-
-	if (swSupported && offscreenSupported) {
-		try {
-			await initWorker();
-		} catch (e) {
-			console.warn("Service Worker initialization failed, falling back to Web Worker", e);
-			await startWebWorker();
-		}
-	} else {
-		console.warn("Service Worker not supported, using Web Worker fallback.");
-		await startWebWorker();
-	}
-	updateProgress();
-	updateVerifyProgress();
-	const retake = document.getElementById('retakeBtn');
-	const restart = document.getElementById('restartBtn');
-	const cancel = document.getElementById('cancelBtn');
-	const download = document.getElementById('downloadBtn');
-	if (retake) retake.addEventListener('click', retakeLastCapture);
-	if (restart) restart.addEventListener('click', restartRegistration);
-	if (cancel) cancel.addEventListener('click', cancelRegistration);
-	if (download) download.addEventListener('click', downloadRegistrationData);
-	const verifyRestart = document.getElementById('verifyRestartBtn');
-	const verifyCancel = document.getElementById('verifyCancelBtn');
-	if (verifyRestart) verifyRestart.addEventListener('click', restartVerification);
-	if (verifyCancel) verifyCancel.addEventListener('click', cancelVerification);
-	
-	const verifyContainer = document.getElementById('verifyProgressContainer');
-	if (verifyContainer) {
-		const videoEl = document.getElementById('video');
-		verifyContainer.addEventListener('click', e => {
-			if (e.target.classList.contains('capture-thumb')) return;
-			verifyContainer.classList.toggle('expanded');
-			if (verifyContainer.classList.contains('expanded')) {
-				if (videoEl) videoEl.pause();
-			} else {
-				if (videoEl) videoEl.play();
-			}
-			e.stopPropagation();
-		});
-		document.addEventListener('click', e => {
-			if (!verifyContainer.contains(e.target)) {
-				const wasExpanded = verifyContainer.classList.contains('expanded');
-				verifyContainer.classList.remove('expanded');
-				if (wasExpanded && videoEl) videoEl.play();
-			}
-		});
-	}
-	
-	const verifyTa = document.querySelector('.all_face_id_for_verification');
-	if (verifyTa) {
-		const tryStartVerification = () => {
-			const txt = verifyTa.value.trim();
-			if (!txt) return;
-			try {
-				if (txt !== lastLoadedVerificationJson) {
-					JSON.parse(txt);
-					lastLoadedVerificationJson = txt;
-					load_face_descriptor_json(txt);
-				}
-			} catch (err) {
-				console.error('Invalid verification JSON', err);
-			}
-		};
-		verifyTa.addEventListener('input', tryStartVerification);
-		tryStartVerification();
-	}
-	// ----- Preview thumbnail interaction -----
-	// Each captured frame is rendered as a small thumbnail inside the progress
-	// container.  When the user taps on a thumbnail we want to show a larger
-	// preview without collapsing the container.  The handler below expands the
-	// progress container if it isn't already, pauses the video stream, then
-	// displays the clicked image inside a modal dialog.
-	const capturePreviewEl = document.getElementById('capturePreview');
-	if (capturePreviewEl) {
-		capturePreviewEl.addEventListener('click', e => {
-			// Only react when one of the <img class="capture-thumb"> elements is clicked
-			if (e.target.classList.contains('capture-thumb')) {
-				// Prevent the click from triggering the container's toggle logic
-				e.stopPropagation();
-				
-				const progressContainer = document.getElementById('progressContainer');
-				const video = document.getElementById('video');
-				
-				// Automatically expand the progress panel so the enlarged image
-				// is visible, and pause the camera feed to avoid confusion.
-				if (progressContainer && !progressContainer.classList.contains('expanded')) {
-					progressContainer.classList.add('expanded');
-					if (video) video.pause();
-					if (typeof pauseRegistrationTimer === 'function') pauseRegistrationTimer();
-				}
-				
-				showModalImage(parseInt(e.target.dataset.index));
-			}
-		});
-	}
-	const modalEl = document.getElementById('imageModal');
-	if (modalEl) {
-		const prevBtn = modalEl.querySelector('.prev');
-		const nextBtn = modalEl.querySelector('.next');
-		const imgInModal = modalEl.querySelector('img');
-		if (prevBtn) prevBtn.addEventListener('click', e => {
-			e.stopPropagation();
-			if (currentModalIndex > 0) {
-				showModalImage(currentModalIndex - 1);
-			}
-		});
-		if (nextBtn) nextBtn.addEventListener('click', e => {
-			e.stopPropagation();
-			if (currentModalIndex < capturedFrames.length - 1) {
-				showModalImage(currentModalIndex + 1);
-			}
-		});
-		if (imgInModal) imgInModal.addEventListener('click', e => {
-			e.stopPropagation();
-		});
-		let touchStartX = 0;
-		modalEl.addEventListener('touchstart', e => {
-			if (e.touches && e.touches.length > 0) {
-				touchStartX = e.touches[0].screenX;
-			}
-		});
-		modalEl.addEventListener('touchend', e => {
-			if (e.changedTouches && e.changedTouches.length > 0) {
-				const diff = e.changedTouches[0].screenX - touchStartX;
-				if (Math.abs(diff) > 30) {
-					if (diff < 0 && currentModalIndex < capturedFrames.length - 1) {
-						showModalImage(currentModalIndex + 1);
-					} else if (diff > 0 && currentModalIndex > 0) {
-						showModalImage(currentModalIndex - 1);
-					}
-				}
-			}
-		});
-		modalEl.addEventListener('click', e => {
-			if (e.target === modalEl || e.target.classList.contains('close')) {
-				modalEl.style.display = 'none';
-			}
-		});
-	}
+    adjustDetectionForDevice();
+    setupCanvasResizeObserver(); // Set up the observer for responsive canvases
+    await initializeFaceApi();
+    // Any other setup that depends on the face API can be chained here
 });
 
 // Add multi-face drawing utilities
@@ -1649,4 +1532,29 @@ function drawAllFaces(detectionsArray) {
 	}
 	drawAllLandmarks(detectionsArray);
 	drawAllBoxesAndLabels(detectionsArray);
+}
+
+/**
+ * Sets up a ResizeObserver to keep canvas overlays perfectly aligned with the video element.
+ * This is crucial for responsive layouts, especially on mobile devices.
+ */
+function setupCanvasResizeObserver() {
+    const video = document.getElementById(videoId);
+    const canvases = [canvasId, canvasId2, canvasId3].map(id => document.getElementById(id));
+
+    const resizeObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            canvases.forEach(canvas => {
+                if (canvas) {
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+            });
+        }
+    });
+
+    if (video) {
+        resizeObserver.observe(video);
+    }
 }
