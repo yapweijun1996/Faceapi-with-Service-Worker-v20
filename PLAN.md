@@ -31,13 +31,14 @@ The application operates entirely on the client-side, comprising three key compo
 ### 3.2. Registration Process
 
 *   **UX Flow**:
-    1.  **Initiation**: The user enters their ID and name and starts the process.
-    2.  **Real-time Feedback**: A live video feed is displayed with an overlaid bounding box and facial landmarks.
-    3.  **Automated Capture**: The application automatically captures 20 high-quality photos, providing feedback to the user.
-    4.  **Completion**: The user's profile, including the captured face descriptors, is saved to IndexedDB.
+    1.  **User Input**: The flow begins with a form where the user must enter their ID and name.
+    2.  **Initiation**: Clicking "Start Registration" validates the inputs and reveals the camera view.
+    3.  **Automated Capture**: The application automatically captures 20 high-quality face images, providing real-time feedback and progress.
+    4.  **User Confirmation**: Once all images are captured, the camera stops, and a "Submit" button is enabled. The data is only saved to IndexedDB after the user explicitly clicks this button.
+    5.  **Completion**: After submission, the profile is saved, and the user is redirected.
 *   **Technical Implementation**:
-    *   **UI (`face_register.html`)**: A mobile-responsive layout featuring a `<video>` element, `<canvas>` overlays for feedback, a progress bar, and a thumbnail gallery of captured images.
-    *   **Logic (`faceapi_warmup.js`)**: The `faceapi_register` function orchestrates the capture process, performs quality checks, and uses the `saveUser()` helper to persist the profile in IndexedDB.
+    *   **UI (`face_register.html`)**: The UI now starts with an input form. The video and capture progress elements are hidden until the user initiates the process. A "Submit" button has been added to give the user final control over saving the data.
+    *   **Logic (`faceapi_warmup.js`)**: The `faceapi_register` function now only handles the capture process. A new `submitRegistration` function has been added to handle the final save to IndexedDB, which is triggered by the "Submit" button.
 
 ### 3.3. Verification Process
 

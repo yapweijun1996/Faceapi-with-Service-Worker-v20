@@ -81,11 +81,11 @@
 
 ### Registration
 
-1. User enters ID & name → camera activates.
-2. App overlays guide, auto-captures 20 valid face frames (quality-checked).
-3. Extracts descriptors, stores `{userId, name, descriptors}` to IndexedDB.
-4. Shows completion UI + thumbnails for user review.
-5. After successful registration, the user is automatically redirected to the main page. The "Cancel" button also provides an exit route back to the main page.
+1.  **User Input**: The user enters their ID and name into a form.
+2.  **Initiate Capture**: Clicking "Start Registration" validates the input and activates the camera.
+3.  **Guided Capture**: The application provides on-screen guides and automatically captures 20 valid face frames, with quality checks performed in real-time.
+4.  **User Confirmation**: After capture is complete, a "Submit" button appears. The profile is only saved to IndexedDB when the user clicks this button.
+5.  **Completion & Navigation**: Upon successful submission, the user is redirected to the main page. A "Cancel" button is available throughout the process to discard the registration and return to the main page.
 
 ### Verification
 

@@ -112,6 +112,9 @@ self.addEventListener('message', async function(event) {
         }
       });
       break;
+    case 'PING':
+      broadcastMessage({ type: 'PONG' });
+      break;
     default:
       console.log('Unknown message type:', type);
   }

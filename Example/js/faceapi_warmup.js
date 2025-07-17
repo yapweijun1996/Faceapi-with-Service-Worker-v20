@@ -1631,6 +1631,62 @@ async function startWebWorker() {
     }
 }
 
+// Worker health check and re-initialization
+async function checkWorkerHealth() {
+    if (!worker && !(navigator.serviceWorker && navigator.serviceWorker.controller)) {
+        log.warn("Worker not available for health check.");
+        return Promise.reject("No worker");
+    }
+
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject("timeout");
+        }, 2000);
+
+        const healthCheckHandler = (event) => {
+            if (event.data.type === 'PONG') {
+                clearTimeout(timeout);
+                // Use a temporary handler that removes itself
+                navigator.serviceWorker.removeEventListener('message', healthCheckHandler);
+                if (worker && typeof worker.removeEventListener === 'function') {
+                    worker.removeEventListener('message', healthCheckHandler);
+                }
+                resolve("ok");
+            }
+        };
+
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.addEventListener('message', healthCheckHandler);
+            navigator.serviceWorker.controller.postMessage({ type: 'PING' });
+        } else if (worker && typeof worker.postMessage === 'function') {
+            worker.addEventListener('message', healthCheckHandler);
+            worker.postMessage({ type: 'PING' });
+        } else {
+            clearTimeout(timeout);
+            reject("No worker to ping");
+        }
+    });
+}
+
+document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && isFaceApiReady) {
+        log.info("Tab is visible again. Checking worker health...");
+        try {
+            await checkWorkerHealth();
+            log.info("Worker is healthy.");
+        } catch (error) {
+            log.warn(`Worker health check failed (${error}). Re-initializing Face API...`);
+            isWorkerReady = false;
+            isFaceApiReady = false;
+            // Re-create the promise for the new initialization cycle
+            faceApiReadyPromise = new Promise(resolve => {
+                resolveFaceApiReady = resolve;
+            });
+            await initFaceApi();
+        }
+    }
+});
+
 // Global init function for face-api
 async function initFaceApi() {
     if (isWorkerReady) {
