@@ -125,4 +125,11 @@ Based on user feedback, the following issues have been identified and will be ad
         *   Add a loading modal to `face_register.html`.
         *   Modify `faceapi_warmup.js` to show the modal on page load and hide it after the Face API is ready.
 
+6.  **Robust Fallback for iOS and Timeouts**:
+    *   **Problem**: The application hangs on iOS webview and other devices with unreliable Service Worker support.
+    *   **Solution**: Implement a more robust fallback mechanism that includes an initialization timeout and specific detection for iOS webviews.
+    *   **Implementation**:
+        *   In `faceapi_warmup.js`, add a check to detect if the app is running in an iOS webview (as opposed to standalone Safari). If so, immediately fall back to the Web Worker.
+        *   Wrap the Service Worker initialization in a `Promise.race()` to compete against a 15-second timeout. If the timeout wins, force a fallback to the Web Worker. This ensures that even on non-iOS devices, a faulty Service Worker does not hang the application.
+
 This plan provides a clear path to building a high-performance, robust, and user-friendly face recognition application.

@@ -1436,39 +1436,46 @@ async function initializeFaceApi() {
     updateModelStatus('Initializing...');
     const swSupported = 'serviceWorker' in navigator;
     const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
+    const userAgent = navigator.userAgent;
+    const isIos = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+    // Differentiate between standalone Safari and in-app webviews on iOS.
+    const isIosWebview = isIos && !/Safari/.test(userAgent);
 
-    if (swSupported && offscreenSupported) {
-        try {
-            console.log('Attempting to initialize Service Worker...');
-            // Use the more robust, existing workerRegistration function
-            const sw = await workerRegistration();
-            if (!sw) {
-                throw new Error('Service Worker registration failed to return an active worker.');
-            }
-
-            // The global 'worker' variable is now set by workerRegistration.
-            // Add the message listener.
-            navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
-            
-            console.log('Service Worker is active. Loading models.');
-            updateModelStatus('Loading models via Service Worker...');
-
-            // The controller is the safest way to post a message.
-            if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ type: 'LOAD_MODELS' });
-            } else {
-                // Fallback to the worker reference if controller is not yet available.
-                sw.postMessage({ type: 'LOAD_MODELS' });
-            }
-            isWorkerReady = true;
-
-        } catch (error) {
-            console.error('Service Worker initialization failed:', error);
-            await startWebWorker(); // Fallback to Web Worker
-        }
-    } else {
-        console.warn('Service Worker or OffscreenCanvas not supported. Using Web Worker fallback.');
+    // iOS webviews have poor Service Worker support, so we fall back immediately.
+    if (isIosWebview || !swSupported || !offscreenSupported) {
+        console.warn('Service Worker not supported or on iOS Webview. Using Web Worker fallback.');
         await startWebWorker();
+        return;
+    }
+
+    try {
+        console.log('Attempting to initialize Service Worker...');
+        
+        // Race the Service Worker initialization against a timeout.
+        const swPromise = workerRegistration();
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Service Worker initialization timed out')), 15000) // 15s timeout
+        );
+
+        const sw = await Promise.race([swPromise, timeoutPromise]);
+
+        if (!sw) {
+            throw new Error('Service Worker registration failed to return an active worker.');
+        }
+
+        // The global 'worker' variable is now set by workerRegistration.
+        navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
+        
+        console.log('Service Worker is active. Loading models.');
+        updateModelStatus('Loading models via Service Worker...');
+
+        // Use the worker reference to post the message.
+        sw.postMessage({ type: 'LOAD_MODELS' });
+        isWorkerReady = true;
+
+    } catch (error) {
+        console.error('Service Worker initialization failed:', error);
+        await startWebWorker(); // Fallback to Web Worker
     }
 }
 
