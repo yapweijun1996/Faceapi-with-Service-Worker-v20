@@ -17,18 +17,12 @@ const FaceDetectorOptionsDefault = new faceapi.TinyFaceDetectorOptions({
 });
 let faceDetectorOptions = FaceDetectorOptionsDefault;
 
-async function loadModels(client) {
-  const post = (message) => client.postMessage({ type: 'MODEL_LOADING_PROGRESS', message });
-
-  post('Loading face detector (worker)...');
+async function loadModels() {
   await faceapi.nets.tinyFaceDetector.loadFromUri('../models');
-  post('Loading face landmarks (worker)...');
   await faceapi.nets.faceLandmark68Net.loadFromUri('../models');
-  post('Loading face recognition (worker)...');
   await faceapi.nets.faceRecognitionNet.loadFromUri('../models');
-  
   isModelLoaded = true;
-  client.postMessage({ type: 'MODELS_LOADED' });
+  self.postMessage({ type: 'MODELS_LOADED' });
 }
 
 async function detectFaces(imageData, width, height) {
@@ -76,49 +70,19 @@ self.onmessage = async (event) => {
 
   switch (type) {
     case 'LOAD_MODELS':
-      await loadModels(self);
+      await loadModels();
       break;
     case 'DETECT_FACES': {
       const result = await detectFaces(imageData, width, height);
       self.postMessage({
         type: 'DETECTION_RESULT',
-        data: { detections: result, displaySize: { width, height } },
+        data: { detections: result, displaySize: { width, height } }
       });
       break;
     }
-    case 'WARMUP_FACES': {
-      try {
-        // Create a dummy canvas for warmup
-        const warmupCanvas = new OffscreenCanvas(1, 1);
-        await faceapi.detectAllFaces(warmupCanvas, faceDetectorOptions);
-        self.postMessage({ type: 'WARMUP_RESULT', success: true });
-      } catch (error) {
-        console.error('WebWorker: Warmup with dummy canvas failed:', error);
-        self.postMessage({ type: 'WARMUP_RESULT', success: false, error: error.message });
-      }
-      break;
-    }
     case 'WARMUP_WITH_IMAGE': {
-      try {
-        console.log('WebWorker: Starting warmup with static image...');
-        const response = await fetch('../models/face_for_loading.png');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch warmup image: ${response.statusText}`);
-        }
-        const imageBlob = await response.blob();
-        const imageBitmap = await createImageBitmap(imageBlob);
-
-        const warmupCanvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
-        const ctx = warmupCanvas.getContext('2d');
-        ctx.drawImage(imageBitmap, 0, 0);
-        
-        await faceapi.detectAllFaces(warmupCanvas, faceDetectorOptions);
-        console.log('WebWorker: Warmup detection successful.');
-        self.postMessage({ type: 'WARMUP_RESULT', success: true });
-      } catch (error) {
-        console.error('WebWorker: Warmup with image failed:', error);
-        self.postMessage({ type: 'WARMUP_RESULT', success: false, error: error.message });
-      }
+      await detectFaces(imageData, width, height);
+      self.postMessage({ type: 'WARMUP_COMPLETE' });
       break;
     }
     default:

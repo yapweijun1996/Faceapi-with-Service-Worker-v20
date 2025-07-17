@@ -30,11 +30,15 @@
 				<a href="#" onclick="urlReplace('face_register.html')" style="display:block; width:220px; margin:8px auto; padding:12px 20px; background:#4CAF50; color:#fff; text-decoration:none; border-radius:4px;">face_register</a>
 				<a href="#" onclick="urlReplace('face_verify.html')" style="display:block; width:220px; margin:8px auto; padding:12px 20px; background:#FF9800; color:#fff; text-decoration:none; border-radius:4px;">face_verify</a>
 
-				<div id="model-status" style="margin-top: 20px; font-size: 16px; color: #555;">Initializing...</div>
-
 				<!-- Preload face-api core and warm-up helper so service worker models load in background -->
 				<script src="./js/face-api.min.js"></script>
 				<script src="./js/faceapi_warmup.js"></script>
+				<script>
+					// Start loading the models as soon as the page is ready
+					window.addEventListener('DOMContentLoaded', () => {
+						initFaceApi();
+					});
+				</script>
 			</div>
 		</div>
 	</body>
