@@ -425,25 +425,6 @@
 			function urlReplace(url) {
 				window.location.replace(url);
 			}
-			
-			// Initialize the face API and then start the registration process
-			async function startRegistration() {
-				// Show a loading indicator while models are being loaded
-				showLoadingOverlay();
-				
-				// Initialize the Face API
-				await initFaceApi();
-				
-				// Wait until the API is fully ready
-				await faceApiReadyPromise;
-				
-				// Hide the loading indicator
-				hideLoadingOverlay();
-				
-				// Start the camera and face detection
-				camera_start();
-				video_face_detection();
-			}
 			function hideLoadingOverlay(){
 				const el = document.getElementById('loadingOverlay');
 				if(el){
@@ -493,10 +474,7 @@
 		</script>
 	</head>
 	<body>
-		<div id="loadingOverlay" style="display: none;">
-			<div class="spinner"></div>
-			<p>Loading face detection models...</p>
-		</div>
+		<div id="loadingOverlay">Loading face detection models...</div>
 		<div id="orientationOverlay">Please rotate your device to portrait orientation for best results.</div>
 		<div id="permissionOverlay">Camera access is required. Please grant permission or open this page in a supported browser.</div>
 		<div id="instructionsOverlay">
@@ -518,6 +496,8 @@
 		<div style="display:none;">
 			<h1>Face Detection</h1>
 			<a href="#" onclick="urlReplace('index.html')">Go to Index</a><br>
+			<input type="file" id="jsonFileInput" accept=".json" onchange="handleJsonFileInput(event)" multiple>
+			<textarea class="user_face_id_json" style="display:none;"></textarea>
 			<!-- Add user ID and name inputs -->
 			<label>User ID: <input type="text" id="userIdInput" placeholder="Enter user ID"></label>
 			<label>User Name: <input type="text" id="userNameInput" placeholder="Enter user name"></label><br>
@@ -532,7 +512,7 @@
 				</div>
 				<button id="restartBtn" class="ctrl-btn ctrl-btn-warning">Restart</button>
 				<button id="cancelBtn" class="ctrl-btn ctrl-btn-danger">Cancel</button>
-				<button id="saveBtn" class="ctrl-btn ctrl-btn-success" style="display:none;">Save</button>
+				<button id="downloadBtn" class="ctrl-btn ctrl-btn-success" style="display:none;">Download</button>
 			</div>
 			<div id="capturePreview"></div>
 		</div>
@@ -556,9 +536,6 @@
 				if(!localStorage.getItem('instructionsShown')){
 					showInstructions();
 				}
-				
-				// Start the registration process
-				startRegistration();
 			});
 			
 			function checkOrientation(){
@@ -628,6 +605,8 @@
 			* Face-API Configuration
 			* -------------------------------
 			* faceapi_action
+			*   • "verify"   – Compare the live video frame against a previously
+			*     registered reference descriptor (used in a face-verification flow).
 			*   • "register" – Capture the detected face descriptor and store it as
 			*     a new reference (used when enrolling a new user).
 			*
@@ -637,17 +616,18 @@
 			*   • inputSize        – Dimension (square) of the NN input. Larger numbers
 			*                         improve accuracy but require more computation.
 			*   • scoreThreshold   – Minimum confidence score (0-1) that a detection
-			*                         must reach to be considered valid. 0.75 = 75%.
+			*                         must reach to be considered valid. 0.8 = 80%.
 			*   • maxDetectedFaces – Hard limit on how many faces should be processed
 			*                         per frame. Keeping it at 1 speeds things up when
 			*                         you only care about the user in front of the
 			*                         camera.
 			* ================================
 			*/
-			var faceapi_action = "register";
+			var faceapi_action = "register"; // verify, register
+			var warmup_completed = [hideLoadingOverlay, camera_start, video_face_detection];
 			var face_detector_options_setup = {
 				inputSize: 128,
-				scoreThreshold: 0.75,
+				scoreThreshold: 0.75, // 0.8 = 80%
 				maxDetectedFaces: 1,
 			};
 		</script>

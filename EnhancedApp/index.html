@@ -15,9 +15,16 @@
 				margin: 0px;
 				padding: 0px;
 			}
+			#loadingOverlay{position:fixed;inset:0;background:rgba(0,0,0,.85);color:#fff;display:flex;justify-content:center;align-items:center;text-align:center;z-index:10006;flex-direction:column;gap:1rem}
+			.spinner{width:50px;height:50px;border:5px solid #f3f3f3;border-top:5px solid #3498db;border-radius:50%;animation:spin 1s linear infinite}
+			@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 		</style>
 	</head>
 	<body>
+		<div id="loadingOverlay" style="display: none;">
+			<div class="spinner"></div>
+			<p>Getting application ready...</p>
+		</div>
 		<!-- Minimal inline CSS to center content and style links as buttons -->
 		<div style="font-family: Arial, sans-serif; margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#f5f5f5; width:100%;">
 			<div style="text-align:center;">
@@ -34,8 +41,8 @@
 				<script src="./js/face-api.min.js"></script>
 				<script src="./js/faceapi_warmup.js"></script>
 				<script>
-					// Start loading the models as soon as the page is ready
-					window.addEventListener('DOMContentLoaded', () => {
+					document.addEventListener('DOMContentLoaded', () => {
+						// This will start the model loading process in the background
 						initFaceApi();
 					});
 				</script>

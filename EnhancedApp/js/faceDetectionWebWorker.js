@@ -31,6 +31,12 @@ async function detectFaces(imageData, width, height) {
     return [null, []];
   }
 
+  // Guard against invalid dimensions
+  if (!width || !height) {
+    console.error('WebWorker: Invalid dimensions for OffscreenCanvas');
+    return [null, []];
+  }
+
   const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.putImageData(imageData, 0, 0);
@@ -80,9 +86,12 @@ self.onmessage = async (event) => {
       });
       break;
     }
-    case 'WARMUP_WITH_IMAGE': {
-      await detectFaces(imageData, width, height);
-      self.postMessage({ type: 'WARMUP_COMPLETE' });
+    case 'WARMUP_FACES': {
+      const result = await detectFaces(imageData, width, height);
+      self.postMessage({
+        type: 'WARMUP_RESULT',
+        data: { detections: result, displaySize: { width, height } }
+      });
       break;
     }
     default:

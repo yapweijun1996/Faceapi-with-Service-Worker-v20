@@ -74,78 +74,117 @@ var verificationResults = [];
 var multiple_face_detection_yn = "y";
 
 // ---------------------------------------------------------------------------
-// IndexedDB Integration for Persistent Storage
+// Persisting registration progress
 // ---------------------------------------------------------------------------
-// We use IndexedDB to store user profiles (ID, name, and face descriptors)
-// persistently in the browser. This avoids the need for manual file handling
-// and creates a more seamless experience.
+// Captured descriptors and thumbnails are stored in IndexedDB so that a user can
+// refresh the page or come back later without losing their partially completed
+// registration.  The helpers below handle saving/loading that state.
 
-const DB_NAME = 'faceDatabase';
-const DB_VERSION = 1;
-const STORE_NAME = 'users';
+async function openProgressDB() {
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.open('FaceRegProgressDB', 1);
+		request.onupgradeneeded = e => {
+			const db = e.target.result;
+			if (!db.objectStoreNames.contains('progress')) {
+				db.createObjectStore('progress', { keyPath: 'id' });
+			}
+		};
+		request.onsuccess = e => resolve(e.target.result);
+		request.onerror = e => reject(e.target.error);
+	});
+}
+
+function saveProgress() {
+	const data = {
+		id: currentUserId,
+		name: currentUserName,
+		descriptors: currentUserDescriptors.map(d => Array.from(d)),
+		frames: capturedFrames
+	};
+	openProgressDB().then(db => {
+		const tx = db.transaction('progress', 'readwrite');
+		tx.objectStore('progress').put({ id: 'current', data });
+	}).catch(e => console.warn('Failed to save progress', e));
+}
+
+function loadProgress() {
+	openProgressDB().then(db => {
+		const tx = db.transaction('progress', 'readonly');
+		const req = tx.objectStore('progress').get('current');
+		req.onsuccess = () => {
+			const record = req.result;
+			if (!record || !record.data || !Array.isArray(record.data.descriptors)) return;
+			const data = record.data;
+			currentUserId = data.id || '';
+			currentUserName = data.name || '';
+			currentUserDescriptors = data.descriptors.map(arr => new Float32Array(arr));
+			capturedFrames = Array.isArray(data.frames) ? data.frames : [];
+			const idInput = document.getElementById('userIdInput');
+			const nameInput = document.getElementById('userNameInput');
+			if (idInput) idInput.value = currentUserId;
+			if (nameInput) nameInput.value = currentUserName;
+			capturedFrames.forEach(url => addCapturePreview(url));
+			updateProgress();
+		};
+	}).catch(e => console.warn('Failed to load progress', e));
+}
+
+function clearProgress() {
+	openProgressDB().then(db => {
+		const tx = db.transaction('progress', 'readwrite');
+		tx.objectStore('progress').delete('current');
+	}).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Persisting user profiles to IndexedDB
+// ---------------------------------------------------------------------------
 let db;
 
 async function initDB() {
-	return new Promise((resolve, reject) => {
-		const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-		request.onupgradeneeded = (event) => {
-			const db = event.target.result;
-			if (!db.objectStoreNames.contains(STORE_NAME)) {
-				db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-			}
-		};
-
-		request.onsuccess = (event) => {
-			db = event.target.result;
-			resolve(db);
-		};
-
-		request.onerror = (event) => {
-			console.error('IndexedDB error:', event.target.error);
-			reject(event.target.error);
-		};
-	});
+    return new Promise((resolve, reject) => {
+        if (db) {
+            return resolve(db);
+        }
+        const request = indexedDB.open('UserDB', 1);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('users')) {
+                db.createObjectStore('users', { keyPath: 'id' });
+            }
+        };
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            resolve(db);
+        };
+        request.onerror = (event) => {
+            console.error('Database error:', event.target.error);
+            reject(event.target.error);
+        };
+    });
 }
 
 async function saveUser(user) {
-	if (!db) await initDB();
-	return new Promise((resolve, reject) => {
-		const transaction = db.transaction([STORE_NAME], 'readwrite');
-		const store = transaction.objectStore(STORE_NAME);
-		const request = store.put(user);
-
-		request.onsuccess = () => resolve();
-		request.onerror = (event) => {
-			console.error('Failed to save user:', event.target.error);
-			reject(event.target.error);
-		};
-	});
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readwrite');
+        const store = transaction.objectStore('users');
+        const request = store.put(user);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error saving user: ' + event.target.error);
+    });
 }
 
 async function getAllUsers() {
-	if (!db) await initDB();
-	return new Promise((resolve, reject) => {
-		const transaction = db.transaction([STORE_NAME], 'readonly');
-		const store = transaction.objectStore(STORE_NAME);
-		const request = store.getAll();
-
-		request.onsuccess = (event) => {
-			resolve(event.target.result);
-		};
-
-		request.onerror = (event) => {
-			console.error('Failed to get all users:', event.target.error);
-			reject(event.target.error);
-		};
-	});
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['users'], 'readonly');
+        const store = transaction.objectStore('users');
+        const request = store.getAll();
+        request.onsuccess = (event) => resolve(event.target.result);
+        request.onerror = (event) => reject('Error getting all users: ' + event.target.error);
+    });
 }
-
-// The functions saveProgress, loadProgress, and clearProgress are now obsolete
-// and will be removed. The new IndexedDB helpers above will be used instead.
-function saveProgress() { /* no-op */ }
-function loadProgress() { /* no-op */ }
-function clearProgress() { /* no-op */ }
 
 // Adjust detection options for low-end devices
 function adjustDetectionForDevice() {
@@ -301,8 +340,8 @@ function restartRegistration() {
 	registrationStartTime = null;
 	registrationCompleted = false;
 	faceapi_action = 'register';
-	const saveBtn = document.getElementById('saveBtn');
-	if (saveBtn) saveBtn.style.display = 'none';
+	const downloadBtn = document.getElementById('downloadBtn');
+	if (downloadBtn) downloadBtn.style.display = 'none';
 	updateProgress();
 	clearProgress();
 	clear_all_canvases();
@@ -324,8 +363,8 @@ function cancelRegistration() {
 	capturedFrames = [];
 	const preview = document.getElementById('capturePreview');
 	if (preview) preview.innerHTML = '';
-	const saveBtn = document.getElementById('saveBtn');
-	if (saveBtn) saveBtn.style.display = 'none';
+	const downloadBtn = document.getElementById('downloadBtn');
+	if (downloadBtn) downloadBtn.style.display = 'none';
 	updateProgress();
 	clearProgress();
 	clear_all_canvases();
@@ -369,32 +408,36 @@ function cancelVerification() {
 	clear_all_canvases();
 }
 
-async function saveRegistrationData() {
-	if (currentUserDescriptors.length < maxCaptures) {
-		showMessage('error', `Please capture all ${maxCaptures} images before saving.`);
-		return;
-	}
-
+function populateUserFaceIdTextarea() {
+	if (currentUserDescriptors.length === 0) return null;
 	const meanDescriptor = computeMeanDescriptor(currentUserDescriptors);
-	const user = {
+	const downloadData = [{
 		id: currentUserId,
 		name: currentUserName,
 		descriptors: [
 			...currentUserDescriptors.map(d => Array.from(d)),
 			Array.from(meanDescriptor)
 		]
-	};
-
-	try {
-		await saveUser(user);
-		showMessage('success', `User ${currentUserName} saved successfully!`);
-		// Optionally, redirect or clear the form
-		setTimeout(() => {
-			window.location.href = 'index.html';
-		}, 2000);
-	} catch (error) {
-		showMessage('error', `Failed to save user: ${error.message}`);
+	}];
+	const jsonData = JSON.stringify(downloadData, null, 2);
+	const ta = document.querySelector('.user_face_id_json');
+	if (ta) {
+		ta.value = jsonData;
+		ta.dispatchEvent(new Event('input', { bubbles: true }));
 	}
+	return jsonData;
+}
+
+function downloadRegistrationData() {
+	const jsonData = populateUserFaceIdTextarea();
+	if (!jsonData) return;
+	const blob = new Blob([jsonData], { type: 'application/json' });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = 'faceid_with_users.json';
+	link.click();
+	URL.revokeObjectURL(url);
 }
 
 function updateVerificationResultTextarea() {
@@ -585,21 +628,6 @@ async function camera_start() {
     showMessage('error', 'Camera not supported in this browser.');
     return;
   }
-
-  // Add ResizeObserver to keep canvas overlays aligned with the video
-  const observer = new ResizeObserver(entries => {
-	  const videoEntry = entries[0];
-	  const { width, height } = videoEntry.contentRect;
-	  const canvases = [canvasId, canvasId2, canvasId3];
-	  canvases.forEach(id => {
-		  const canvas = document.getElementById(id);
-		  if (canvas) {
-			  canvas.width = width;
-			  canvas.height = height;
-		  }
-	  });
-  });
-  observer.observe(video);
 
   // Add playsinline etc. attributes programmatically
   video.setAttribute('playsinline', '');
@@ -1166,17 +1194,36 @@ function faceapi_register(descriptor) {
 		bestCandidateMinDist = 0;
 		// Check if registration is complete
 		if (currentUserDescriptors.length >= maxCaptures) {
-			alert("Registration completed for user: " + currentUserName + " (" + currentUserId + ")");
 			registrationCompleted = true;
 			stopRegistrationTimer();
 			faceapi_action = null;
 			camera_stop();
 			clear_all_canvases();
-			const container = document.getElementById('progressContainer');
-			if (container) container.classList.add('expanded');
-			const saveBtn = document.getElementById('saveBtn');
-			if (saveBtn) saveBtn.style.display = 'inline-block';
-			updateProgress();
+			
+			const meanDescriptor = computeMeanDescriptor(currentUserDescriptors);
+			const user = {
+				id: currentUserId,
+				name: currentUserName,
+				descriptors: [
+					...currentUserDescriptors.map(d => Array.from(d)),
+					Array.from(meanDescriptor)
+				]
+			};
+
+			saveUser(user).then(() => {
+				alert("Registration completed and saved for user: " + currentUserName + " (" + currentUserId + ")");
+				// Optionally clear progress after successful save
+				clearProgress();
+				// Hide registration UI elements and show success message
+				const container = document.getElementById('progressContainer');
+				if (container) container.classList.add('expanded');
+				const downloadBtn = document.getElementById('downloadBtn');
+				if (downloadBtn) downloadBtn.style.display = 'none'; // No more download
+				updateProgress();
+			}).catch(err => {
+				console.error(err);
+				showMessage('error', 'Failed to save user profile.');
+			});
 		}
 	}
 }
@@ -1256,18 +1303,14 @@ function handleWorkerMessage(event) {
     console.log('Received message from worker:', event.data.type);
     switch (event.data.type) {
         case 'MODELS_LOADED':
-            console.log('Face detection models loaded by worker. Triggering image warmup...');
-            // Trigger image-based warmup immediately after models are loaded
-            triggerImageWarmup();
+            console.log('Face detection models loaded by worker.');
+            isFaceApiReady = true;
+            if (typeof resolveFaceApiReady === 'function') {
+                resolveFaceApiReady();
+            }
+            hideLoadingOverlay();
+            faceapi_warmup();
             break;
-		case 'WARMUP_COMPLETE':
-			console.log('Image-based warmup complete. Face API is fully ready.');
-			isFaceApiReady = true;
-			if (typeof resolveFaceApiReady === 'function') {
-				resolveFaceApiReady();
-			}
-			hideLoadingOverlay();
-			break;
         case 'DETECTION_RESULT':
             const dets = event.data.data.detections[0];
             const imageDataForFrame = event.data.data.detections[1] && event.data.data.detections[1][0];
@@ -1329,6 +1372,12 @@ function handleWorkerMessage(event) {
             isDetectingFrame = false;
             if (typeof videoDetectionStep === 'function') {
                 requestAnimationFrame(videoDetectionStep);
+            }
+            break;
+        case 'WARMUP_RESULT':
+            console.log('Warmup completed by worker.');
+            if (typeof warmup_completed !== 'undefined' && Array.isArray(warmup_completed)) {
+                warmup_completed.forEach(func => func());
             }
             break;
         default:
@@ -1418,67 +1467,73 @@ async function load_model() {
 async function initWorker() {
 	if ('serviceWorker' in navigator) {
 		try {
+			// Optionally uncomment if needed
+			// await unregisterAllServiceWorker();
+			
 			console.log("Registering service worker...");
-			await workerRegistration();
+			await workerRegistration(); // Wait for worker registration
 			
 			console.log("Adding event listeners...");
-			await initWorkerAddEventListener();
+			await initWorkerAddEventListener(); // Wait for event listeners to be added
 			
-			// The controller might not be immediately available, especially on first load.
-			// We wait for it to be set.
-			await navigator.serviceWorker.ready;
-
-			console.log("Loading models in Service Worker...");
-			if (navigator.serviceWorker.controller) {
-				navigator.serviceWorker.controller.postMessage({ type: 'LOAD_MODELS' });
-				isWorkerReady = true;
-				console.log("LOAD_MODELS message sent to Service Worker.");
-			} else {
-				throw new Error("Service Worker controller is not available.");
+			console.log("Waiting for 1 second...");
+			await delay(500); // Wait for 1 second to give the service worker some time to activate. If not, when the service worker is created for the first time, posting a message will cause an error and stop everything.
+			
+			console.log("Loading model...");
+			await load_model(); // Wait for the model to load
+			
+			isWorkerReady = true; // Set the worker as ready
+			isFaceApiReady = true;
+			if (typeof resolveFaceApiReady === 'function') {
+				resolveFaceApiReady();
 			}
+			hideLoadingOverlay();
+			console.log("Worker initialized successfully.");
 		} catch (error) {
-			console.error("Error initializing Service Worker:", error);
-			throw error; // Propagate error to trigger fallback
+			console.error("Error initializing worker:", error);
 		}
 	} else {
-		throw new Error('Service workers are not supported in this browser.');
+		console.error('Service workers are not supported in this browser.');
 	}
 }
 
 
-function triggerImageWarmup() {
-	const img = new Image();
-	img.src = imgFaceFilePathForWarmup;
-	img.onload = () => {
-		const canvas = document.createElement('canvas');
-		canvas.width = img.width;
-		canvas.height = img.height;
-		const context = canvas.getContext('2d');
-		context.drawImage(img, 0, 0);
-		const imageData = context.getImageData(0, 0, img.width, img.height);
-
-		const message = {
-			type: 'WARMUP_WITH_IMAGE',
-			imageData: imageData,
-			width: img.width,
-			height: img.height,
+function faceapi_warmup() {
+	var img_face_for_loading = imgFaceFilePathForWarmup;
+	if (img_face_for_loading) {
+		var img = new Image();
+		img.src = img_face_for_loading;
+		img.onload = () => {
+			
+			// Create the canvas element
+			let canvas_hidden = document.createElement('canvas');
+			canvas_hidden.willReadFrequently = true;
+			canvas_hidden.style.display = 'none'; // Hide the canvas
+			document.body.appendChild(canvas_hidden); // Append to the body
+			let context = canvas_hidden.getContext("2d");
+			
+			canvas_hidden.width = img.width;
+			canvas_hidden.height = img.height;
+			context.drawImage(img, 0, 0, img.width, img.height);
+			var imageData = context.getImageData(0, 0, img.width, img.height);
+			if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+				navigator.serviceWorker.controller.postMessage({
+					type: 'WARMUP_FACES',
+					imageData,
+					width: img.width,
+					height: img.height
+				});
+			} else if (worker && typeof worker.postMessage === 'function') {
+				worker.postMessage({
+					type: 'WARMUP_FACES',
+					imageData,
+					width: img.width,
+					height: img.height
+				});
+			}
+			canvas_hidden.remove();
 		};
-
-		if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-			navigator.serviceWorker.controller.postMessage(message);
-		} else if (worker) {
-			worker.postMessage(message);
-		}
-	};
-	img.onerror = () => {
-		console.error("Failed to load warmup image.");
-		// If image fails, we can still resolve the promise to not block the app
-		isFaceApiReady = true;
-		if (typeof resolveFaceApiReady === 'function') {
-			resolveFaceApiReady();
-		}
-		hideLoadingOverlay();
-	};
+	}
 }
 
 // Initialize the Web Worker fallback
@@ -1510,72 +1565,108 @@ async function startWebWorker() {
     }
 }
 
-// Initialize either service worker or fallback to web worker
+// Global init function for face-api
 async function initFaceApi() {
-	// Prevent multiple initializations
-	if (window.faceApiInitialized) {
-		return;
-	}
-	window.faceApiInitialized = true;
+    if (isWorkerReady) {
+        console.log("Face API already initialized or in progress.");
+        return;
+    }
+    console.log("Initializing Face API...");
+    showLoadingOverlay();
 
-	adjustDetectionForDevice();
-	console.log("Initializing Face API - checking Service Worker support");
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const swSupported = 'serviceWorker' in navigator;
+    const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
 
-	const swSupported = 'serviceWorker' in navigator;
-	const offscreenSupported = typeof OffscreenCanvas !== 'undefined';
-
-	// Enhanced fallback for iOS and other environments with spotty SW support
-	const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-	const isChromeIOS = /CriOS/.test(navigator.userAgent);
-
-	if (isIOS || isChromeIOS) {
-		console.warn("iOS device detected, forcing Web Worker fallback.");
-		await startWebWorker();
-		return;
-	}
-
-	if (swSupported && offscreenSupported) {
-		try {
-			// Race the SW initialization against a timeout
-			await Promise.race([
-				initWorker(),
-				new Promise((_, reject) => setTimeout(() => reject(new Error("Service Worker initialization timed out")), 15000))
-			]);
-		} catch (e) {
-			console.error("Service Worker initialization failed or timed out, falling back to Web Worker", e);
-			// Ensure any partial SW registration is cleaned up to prevent conflicts
-			unregisterAllServiceWorker();
-			await startWebWorker();
-		}
-	} else {
-		console.warn("Service Worker or OffscreenCanvas not supported, using Web Worker fallback.");
-		await startWebWorker();
-	}
+    if (swSupported && offscreenSupported && !isIOS) {
+        try {
+            // Add a timeout for Service Worker initialization
+            const swTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Service Worker initialization timed out')), 15000)
+            );
+            await Promise.race([initWorker(), swTimeout]);
+        } catch (e) {
+            console.warn("Service Worker initialization failed or timed out, falling back to Web Worker", e);
+            await startWebWorker();
+        }
+    } else {
+        if (isIOS) {
+            console.warn("iOS detected, forcing Web Worker fallback.");
+        } else {
+            console.warn("Service Worker not supported, using Web Worker fallback.");
+        }
+        await startWebWorker();
+    }
 }
 
+// Initialize either service worker or fallback to web worker
 document.addEventListener("DOMContentLoaded", async function(event) {
-	// This function will now only set up page-specific listeners
-	// The core Face API initialization is handled by initFaceApi()
-	// and should be called explicitly from each page.
+	// On pages other than index.html, we wait for the promise.
+	// On index.html, initFaceApi is called directly.
+	if (window.location.pathname.endsWith('face_register.html') || window.location.pathname.endsWith('face_verify.html')) {
+        await faceApiReadyPromise;
+        console.log("Face API is ready, proceeding with page setup.");
+    }
 
+	clearProgress();
+	loadProgress();
+	adjustDetectionForDevice();
+	
+	// Add ResizeObserver to keep canvas overlays aligned with the video
+    const video = document.getElementById(videoId);
+    if (video) {
+        const observer = new ResizeObserver(() => {
+            const overlays = [canvasId, canvasId2, canvasId3].map(id => document.getElementById(id));
+            overlays.forEach(canvas => {
+                if (canvas) {
+                    canvas.width = video.clientWidth;
+                    canvas.height = video.clientHeight;
+                }
+            });
+        });
+        observer.observe(video);
+    }
+
+	updateProgress();
+	updateVerifyProgress();
 	const retake = document.getElementById('retakeBtn');
 	const restart = document.getElementById('restartBtn');
 	const cancel = document.getElementById('cancelBtn');
-	const download = document.getElementById('saveBtn');
+	const download = document.getElementById('downloadBtn');
 	if (retake) retake.addEventListener('click', retakeLastCapture);
 	if (restart) restart.addEventListener('click', restartRegistration);
 	if (cancel) cancel.addEventListener('click', cancelRegistration);
-	if (download) download.addEventListener('click', saveRegistrationData);
-
+	if (download) download.addEventListener('click', downloadRegistrationData);
 	const verifyRestart = document.getElementById('verifyRestartBtn');
 	const verifyCancel = document.getElementById('verifyCancelBtn');
 	if (verifyRestart) verifyRestart.addEventListener('click', restartVerification);
 	if (verifyCancel) verifyCancel.addEventListener('click', cancelVerification);
-
+	
+	const verifyContainer = document.getElementById('verifyProgressContainer');
+	if (verifyContainer) {
+		const videoEl = document.getElementById('video');
+		verifyContainer.addEventListener('click', e => {
+			if (e.target.classList.contains('capture-thumb')) return;
+			verifyContainer.classList.toggle('expanded');
+			if (verifyContainer.classList.contains('expanded')) {
+				if (videoEl) videoEl.pause();
+			} else {
+				if (videoEl) videoEl.play();
+			}
+			e.stopPropagation();
+		});
+		document.addEventListener('click', e => {
+			if (!verifyContainer.contains(e.target)) {
+				const wasExpanded = verifyContainer.classList.contains('expanded');
+				verifyContainer.classList.remove('expanded');
+				if (wasExpanded && videoEl) videoEl.play();
+			}
+		});
+	}
+	
 	const verifyTa = document.querySelector('.all_face_id_for_verification');
 	if (verifyTa) {
-		const tryStartVerification = async () => {
-			await faceApiReadyPromise; // Ensure API is ready before starting
+		const tryStartVerification = () => {
 			const txt = verifyTa.value.trim();
 			if (!txt) return;
 			try {
@@ -1589,32 +1680,80 @@ document.addEventListener("DOMContentLoaded", async function(event) {
 			}
 		};
 		verifyTa.addEventListener('input', tryStartVerification);
-		if (verifyTa.value) {
-			tryStartVerification();
-		}
+		tryStartVerification();
 	}
-
-	// Modal and preview interactions
+	// ----- Preview thumbnail interaction -----
+	// Each captured frame is rendered as a small thumbnail inside the progress
+	// container.  When the user taps on a thumbnail we want to show a larger
+	// preview without collapsing the container.  The handler below expands the
+	// progress container if it isn't already, pauses the video stream, then
+	// displays the clicked image inside a modal dialog.
 	const capturePreviewEl = document.getElementById('capturePreview');
 	if (capturePreviewEl) {
 		capturePreviewEl.addEventListener('click', e => {
+			// Only react when one of the <img class="capture-thumb"> elements is clicked
 			if (e.target.classList.contains('capture-thumb')) {
+				// Prevent the click from triggering the container's toggle logic
 				e.stopPropagation();
+				
 				const progressContainer = document.getElementById('progressContainer');
 				const video = document.getElementById('video');
+				
+				// Automatically expand the progress panel so the enlarged image
+				// is visible, and pause the camera feed to avoid confusion.
 				if (progressContainer && !progressContainer.classList.contains('expanded')) {
 					progressContainer.classList.add('expanded');
 					if (video) video.pause();
 					if (typeof pauseRegistrationTimer === 'function') pauseRegistrationTimer();
 				}
+				
 				showModalImage(parseInt(e.target.dataset.index));
 			}
 		});
 	}
-
 	const modalEl = document.getElementById('imageModal');
 	if (modalEl) {
-		// ... (modal event listeners remain the same)
+		const prevBtn = modalEl.querySelector('.prev');
+		const nextBtn = modalEl.querySelector('.next');
+		const imgInModal = modalEl.querySelector('img');
+		if (prevBtn) prevBtn.addEventListener('click', e => {
+			e.stopPropagation();
+			if (currentModalIndex > 0) {
+				showModalImage(currentModalIndex - 1);
+			}
+		});
+		if (nextBtn) nextBtn.addEventListener('click', e => {
+			e.stopPropagation();
+			if (currentModalIndex < capturedFrames.length - 1) {
+				showModalImage(currentModalIndex + 1);
+			}
+		});
+		if (imgInModal) imgInModal.addEventListener('click', e => {
+			e.stopPropagation();
+		});
+		let touchStartX = 0;
+		modalEl.addEventListener('touchstart', e => {
+			if (e.touches && e.touches.length > 0) {
+				touchStartX = e.touches[0].screenX;
+			}
+		});
+		modalEl.addEventListener('touchend', e => {
+			if (e.changedTouches && e.changedTouches.length > 0) {
+				const diff = e.changedTouches[0].screenX - touchStartX;
+				if (Math.abs(diff) > 30) {
+					if (diff < 0 && currentModalIndex < capturedFrames.length - 1) {
+						showModalImage(currentModalIndex + 1);
+					} else if (diff > 0 && currentModalIndex > 0) {
+						showModalImage(currentModalIndex - 1);
+					}
+				}
+			}
+		});
+		modalEl.addEventListener('click', e => {
+			if (e.target === modalEl || e.target.classList.contains('close')) {
+				modalEl.style.display = 'none';
+			}
+		});
 	}
 });
 

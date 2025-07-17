@@ -266,28 +266,6 @@
 			function urlReplace(url) {
 				window.location.replace(url);
 			}
-
-			async function startVerification() {
-				showLoadingOverlay();
-				await initFaceApi();
-				await faceApiReadyPromise;
-				hideLoadingOverlay();
-
-				// Automatically load users from IndexedDB
-				const users = await getAllUsers();
-				if (users.length > 0) {
-					const jsonStr = JSON.stringify(users);
-					const ta = document.querySelector('.all_face_id_for_verification');
-					if (ta) {
-						ta.value = jsonStr;
-						ta.dispatchEvent(new Event('input', { bubbles: true }));
-					}
-				} else {
-					// Handle case where no users are registered
-					console.warn("No registered users found in IndexedDB.");
-					alert("No users are registered. Please register a user first.");
-				}
-			}
 			function showVerifyCompleteOverlay(){
 				const el = document.getElementById('verifyCompleteOverlay');
 				if(el){
@@ -318,7 +296,6 @@
 			</div>
 		</div>
                 <div id="verifyToast"></div>
-                <textarea class="all_face_id_for_verification" style="display:none;"></textarea>
                 <textarea class="face_verification_result" style="display:none;"></textarea>
 		
 		<div id="verifyProgressContainer" class="controls">
@@ -353,15 +330,100 @@
 			* ================================
 			* Face-API Configuration
 			* -------------------------------
+			* faceapi_action
+			*   • "verify"   – Compare the live video frame against a previously
+			*     registered reference descriptor (used in a face-verification flow).
+			*   • "register" – Capture the detected face descriptor and store it as
+			*     a new reference (used when enrolling a new user).
+			*
+			* face_detector_options_setup
+			*   These options are forwarded to face-api.js TinyFaceDetector and allow
+			*   you to balance performance vs. accuracy according to your use-case.
+			*   • inputSize        – Dimension (square) of the NN input. Larger numbers
+			*                         improve accuracy but require more computation.
+			*   • scoreThreshold   – Minimum confidence score (0-1) that a detection
+			*                         must reach to be considered valid. 0.8 = 80%.
+			*   • maxDetectedFaces – Hard limit on how many faces should be processed
+			*                         per frame. Keeping it at 1 speeds things up when
+			*                         you only care about the user in front of the
+			*                         camera.
+			* ================================
 			*/
-			var faceapi_action = "verify";
+			var faceapi_action = "verify"; // "verify" | "register"
 			var face_detector_options_setup = {
-				inputSize: 128,
-				scoreThreshold: 0.33,
-				maxDetectedFaces: 1,
+				inputSize: 128,       // NN input resolution (choose 128, 160, 224, etc.)
+				scoreThreshold: 0.33,  // Minimum confidence required for a detection
+				maxDetectedFaces: 1,  // Only track the most prominent face in the frame
 			};
+			
+			// Delay camera start & detection until models are fully loaded and warmed up
+			// The worker will send WARMUP_RESULT after MODELS_LOADED, at which point
+			// faceapi_warmup.js will invoke these callbacks.
+			var warmup_completed = [camera_start, video_face_detection];
 
-			document.addEventListener('DOMContentLoaded', startVerification);
+			// Load users from IndexedDB on page load
+			document.addEventListener('DOMContentLoaded', async () => {
+				await initDB();
+				const users = await getAllUsers();
+				
+				if (users && users.length > 0) {
+					registeredUsers = users;
+					flatRegisteredDescriptors = [];
+					flatRegisteredUserMeta = [];
+					
+					registeredUsers.forEach(user => {
+						user.descriptors.forEach((descArr, idx) => {
+							if (idx === user.descriptors.length - 1 && user.descriptors.length > 1) {
+								// Skip mean descriptor
+								return;
+							}
+							flatRegisteredDescriptors.push(new Float32Array(descArr));
+							flatRegisteredUserMeta.push({ id: user.id, name: user.name });
+						});
+					});
+					
+					registeredDescriptors = flatRegisteredDescriptors;
+					
+					const listEl = document.getElementById('verifyPersonList');
+					if (listEl) {
+						listEl.innerHTML = '';
+						registeredUsers.forEach(u => {
+							const li = document.createElement('li');
+							li.dataset.userId = u.id;
+							const name = u.name || 'Unknown';
+							li.innerHTML = `${name} (${u.id}) – <span class="status">pending</span>`;
+							listEl.appendChild(li);
+						});
+					}
+
+					verificationResults = registeredUsers.map(u => ({
+						id: u.id,
+						name: u.name,
+						verified: false,
+						capturedImage: null,
+						utcTime: null,
+						timeZone: null,
+						timeZoneOffset: null,
+						gps: null,
+						device: null,
+						deviceName: null,
+						deviceModel: null,
+						deviceUserAgent: null
+					}));
+					updateVerificationResultTextarea();
+
+					totalVerifyFaces = registeredUsers.length;
+					verifiedCount = 0;
+					verifiedUserIds = new Set();
+					updateVerifyProgress();
+				} else {
+					console.log("No registered users found in the database.");
+					const listEl = document.getElementById('verifyPersonList');
+					if(listEl) {
+						listEl.innerHTML = '<li>No users registered yet.</li>';
+					}
+				}
+			});
 		</script>
 	</body>
 </html>
