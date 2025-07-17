@@ -1376,21 +1376,28 @@ async function faceapi_warmup() {
         }, 10000);
 
         const onWarmupMessage = (event) => {
-            const message = event.data ? event.data : event;
-            if (message.type === 'WARMUP_RESULT') {
-                clearTimeout(warmupTimeout);
-                // Remove the listener
-                if (worker instanceof Worker) {
-                    worker.removeEventListener('message', onWarmupMessage);
-                } else {
-                    navigator.serviceWorker.removeEventListener('message', onWarmupMessage);
-                }
+            const message = event.data;
+            // Guard against empty or irrelevant messages
+            if (!message || message.type !== 'WARMUP_RESULT') {
+                return;
+            }
 
-                if (message.success) {
-                    resolve();
-                } else {
-                    reject(new Error(message.error || 'Unknown warmup error from worker.'));
-                }
+            console.log('onWarmupMessage received:', message); // For debugging
+
+            clearTimeout(warmupTimeout);
+            // Remove this specific listener to avoid memory leaks
+            if (worker instanceof Worker) {
+                worker.removeEventListener('message', onWarmupMessage);
+            } else {
+                navigator.serviceWorker.removeEventListener('message', onWarmupMessage);
+            }
+
+            if (message.success === true) {
+                console.log('Warmup successful, resolving promise.');
+                resolve();
+            } else {
+                console.error('Warmup failed, rejecting promise. Error:', message.error);
+                reject(new Error(message.error || 'Unknown warmup error from worker.'));
             }
         };
 
