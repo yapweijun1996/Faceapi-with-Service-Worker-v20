@@ -529,24 +529,6 @@
 				if(!localStorage.getItem('instructionsShown')){
 					showInstructions();
 				}
-
-				document.getElementById('startBtn').addEventListener('click', () => {
-					const userId = document.getElementById('userIdInput').value.trim();
-					const userName = document.getElementById('userNameInput').value.trim();
-
-					if (!userId || !userName) {
-						alert('User ID and User Name cannot be empty.');
-						return;
-					}
-
-					document.getElementById('registrationForm').style.display = 'none';
-					document.getElementById('captureProgress').style.display = 'block';
-					document.querySelector('.face-detection-container').style.display = 'flex';
-					
-					// Start the camera and detection
-					camera_start();
-					video_face_detection();
-				});
 			});
 			
 			function checkOrientation(){
@@ -561,31 +543,31 @@
 			
 			window.addEventListener('orientationchange', checkOrientation);
 			window.addEventListener('resize', checkOrientation);
-			
+
 			document.addEventListener('DOMContentLoaded', () => {
 				const container = document.getElementById('progressContainer');
 				const video = document.getElementById('video');
 				const modal = document.getElementById('imageModal');
 				container.addEventListener('click', (e) => {
-					if(e.target.classList.contains('capture-thumb')) return;
+					if (e.target.id === 'startBtn' || e.target.classList.contains('capture-thumb')) return;
 					container.classList.toggle('expanded');
-					if(container.classList.contains('expanded')){
+					if (container.classList.contains('expanded')) {
 						video.pause();
-						if(typeof pauseRegistrationTimer === 'function') pauseRegistrationTimer();
+						if (typeof pauseRegistrationTimer === 'function') pauseRegistrationTimer();
 					} else {
 						video.play();
-						if(typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
+						if (typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
 					}
 					e.stopPropagation();
 				});
 				document.addEventListener('click', (e) => {
-					if(modal && modal.style.display === 'flex') return;
-					if(!container.contains(e.target)){
+					if (modal && modal.style.display === 'flex') return;
+					if (!container.contains(e.target)) {
 						const wasExpanded = container.classList.contains('expanded');
 						container.classList.remove('expanded');
-						if(wasExpanded){
+						if (wasExpanded) {
 							video.play();
-							if(typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
+							if (typeof resumeRegistrationTimer === 'function') resumeRegistrationTimer();
 						}
 					}
 				});

@@ -1,143 +1,131 @@
-# Content Engineering Context
+# Engineering Guide: Serverless Face Verification System
 **Project:** Enhanced Face Registration & Verification System (Serverless)
 **Last Updated:** 2025-07-17
 **Maintainer:** Wei Jun Yap
 
 ---
 
-## Project Summary (At a Glance)
+## 1. Project Goal & Core Principles
 
-| Field            | Details                                                                                             |
-|------------------|-----------------------------------------------------------------------------------------------------|
-| System Name      | Enhanced Face Registration & Verification System (Serverless)                                       |
-| Directory        | `EnhancedApp/`                                                                                      |
-| Technologies     | HTML5, CSS3, JavaScript (ES6+), IndexedDB, Service Worker, Web Worker, **face-api.js**                |
-| Key Models       | `tinyFaceDetector`, `faceLandmark68Net`, `faceRecognitionNet`                                       |
-| UX Target        | Mobile & Desktop, pure client-side, privacy-first                                                 |
-| Data Storage     | IndexedDB only; no backend server                                                                   |
-| Key Flows        | User Registration, Face Verification, Profile Management                                            |
-| Deployment       | Static deployment via GitHub Pages                                                                  |
+This project provides a **privacy-first, serverless face verification system** that runs entirely in the user's browser. All biometric data is processed and stored locally on the client's device, ensuring that sensitive information never leaves their control.
+
+**Core Principles:**
+-   **Privacy by Design**: No backend server, no cloud storage. All data remains in the user's browser.
+-   **Performance**: A fast, "instant-on" user experience is achieved by pre-loading and pre-warming ML models in a background thread.
+-   **Responsiveness**: The UI remains fluid and responsive by offloading heavy ML computations to a separate worker thread.
+-   **Cross-Platform Compatibility**: The system is designed to be robust on both desktop and mobile browsers, with fallbacks for platform-specific limitations (e.g., iOS Service Worker behavior).
 
 ---
 
-## 1. Purpose & Principles
+## 2. System Architecture
 
-- Deliver a **privacy-respecting face verification system** that runs entirely in the user's browser.
-- **No backend, no cloud**—all data is stored locally on the user's device, aligning with GDPR principles.
-- Provide a fast, "instant-on" experience by **pre-warming** machine learning models in the background.
-- Ensure the user experience and codebase are robust against browser and platform differences, especially on iOS and Android.
+The application follows a decoupled, multi-threaded architecture to ensure a non-blocking user experience.
 
----
-
-## 2. Key Design Decisions
-
-- **IndexedDB for Storage**: Chosen for its ability to handle complex data structures like face descriptors and user profiles, and for its persistence across browser sessions.
-- **Service Worker with Web Worker Fallback**: Heavy machine learning operations are offloaded to a separate thread to keep the UI responsive. A Web Worker fallback ensures compatibility with iOS and older browsers where Service Worker support may be limited or unreliable.
-- **Model Pre-warming**: The application begins loading the face detection models as soon as the main page is opened, significantly reducing latency when the user navigates to the registration or verification pages.
-- **Serverless Architecture**: The decision to avoid a central server simplifies deployment, enhances user privacy, and eliminates infrastructure maintenance.
-
----
-
-## 3. Terminology & Glossary
-
-| Term            | Definition                                                                                             |
-|-----------------|--------------------------------------------------------------------------------------------------------|
-| **Pre-warming** | The process of preloading `face-api.js` models in a background thread on the initial page load to enable fast feature switching. |
-| **Descriptor**  | A numerical vector (a `Float32Array` of 128 numbers) that represents a face, used for recognition and matching. |
-| **IndexedDB**   | A browser-native, object-oriented database used for storing structured data locally.                   |
-| **Service Worker** | A background script that acts as a network proxy, enabling offline capabilities, background processing, and push notifications. |
-| **Web Worker**  | A lightweight background JavaScript thread used as a fallback if the Service Worker fails or is unsupported. |
-
----
-
-## 4. Content/Data Structures
-
-### User Profile (Stored in IndexedDB `users` object store)
-```javascript
-{
-  id: "A12345",             // User’s unique ID (string)
-  name: "Alice Tan",            // Display name (string)
-  descriptors: [              // Array of Float32Array face descriptors
-    // 20 captured descriptors...
-    [...],
-    // Plus one computed mean descriptor at the end
-    [...],
-  ]
-}
+**High-Level Diagram:**
+```
++----------------------------------+      +---------------------------------+
+|         Browser UI Thread        |      |      Background Worker Thread   |
+| (index/register/verify.html)     |      | (Service Worker / Web Worker)   |
++----------------------------------+      +---------------------------------+
+| - Renders HTML/CSS               |      | - Loads face-api.js models      |
+| - Captures video stream          |      | - Performs all ML inference     |
+| - Handles user interactions      |      |   (detection, recognition)      |
+| - Manages UI state               |      | - Computes mean descriptors     |
++------------------^---------------+      +-----------------^---------------+
+                   |                                        |
+      (postMessage)| Messages:                              |
+                   | - { cmd: 'init', modelsPath: '...' }     |
+                   | - { cmd: 'detect', image: ... }          |
+                   | - { cmd: 'ping' }                        |
+                   |                                        |
+                   v                                        v
++------------------+---------------+      +-----------------+---------------+
+|         Message Listener         |      |         Message Listener        |
+|  (Receives results & updates UI) |      | (Receives commands & executes)  |
++----------------------------------+      +---------------------------------+
+                   |                                        |
+                   | (postMessage) Results:                 |
+                   | - { status: 'ready' }                  |
+                   | - { data: descriptors }                |
+                   | - { status: 'pong' }                   |
+                   +----------------------------------------+
+                                     |
+                                     v
++--------------------------------------------------------------------------+
+|                            Browser Storage                               |
+|                          (IndexedDB: 'user_db')                          |
++--------------------------------------------------------------------------+
+| - Stores user profiles (ID, name)                                        |
+| - Stores face descriptors (Float32Array)                                 |
++--------------------------------------------------------------------------+
 ```
 
-### Page Flows
+---
 
--   **`index.html`**: The main landing page. It initiates `initFaceApi()` to pre-warm the models in the background.
--   **`face_register.html`**: A guided, mobile-first registration page that captures face descriptors and saves the user profile to IndexedDB.
--   **`face_verify.html`**: Loads all registered users, starts the camera, and performs a real-time matching loop to verify faces.
--   **`profile_management.html`**: Allows users to view, edit (rename), and delete their stored profiles.
+## 3. Core Components Explained
+
+### a. Background Worker (Service Worker vs. Web Worker)
+
+To prevent the UI from freezing during intensive ML model loading and inference, all `face-api.js` operations are delegated to a background thread.
+
+-   **Primary Choice: Service Worker (`faceDetectionServiceWorker.js`)**:
+    -   **Why?**: It has a lifecycle independent of the main browser window. This means it can continue running even if the user navigates away from the page, making it ideal for pre-warming models and handling background tasks. It is the more modern and powerful choice.
+    -   **Limitation**: iOS and some browsers can be aggressive in terminating idle Service Workers to save battery, which required implementing a health check.
+
+-   **Fallback: Web Worker (`faceDetectionWebWorker.js`)**:
+    -   **Why?**: It serves as a robust fallback for environments where Service Workers are unsupported or unreliable (e.g., older browsers, private browsing modes, or historically on iOS).
+    -   **Limitation**: A Web Worker is tied to the lifecycle of the page that created it. If the user closes the tab, the worker is terminated.
+
+The application automatically detects Service Worker support and falls back to a Web Worker if necessary.
+
+### b. IndexedDB (`user_db`)
+
+-   **Why?**: IndexedDB was chosen as the local storage solution because it is a transactional, object-oriented database perfect for storing structured data like user profiles and the complex `Float32Array` face descriptors. Unlike `localStorage`, it is asynchronous and won't block the main thread.
+-   **Structure**:
+    -   **Database Name**: `user_db`
+    -   **Object Store**: `users`
+    -   **Key**: `id` (The user's unique identifier)
+    -   **Data**: `{ id, name, descriptors }`
+
+### c. Worker Communication Protocol
+
+Communication between the UI thread and the background worker is handled via `postMessage`. The protocol is defined by a `cmd` field in the message object.
+
+| Command (`cmd`) | Direction | Description                                                                                             |
+|-----------------|-----------|---------------------------------------------------------------------------------------------------------|
+| `init`          | UI -> Worker | Tells the worker to load the `face-api.js` models from the specified path. The worker responds with `{ status: 'ready' }` on success. |
+| `detect`        | UI -> Worker | Sends an `ImageBitmap` to the worker for face detection and recognition. The worker returns the computed descriptors. |
+| `ping`          | UI -> Worker | A health check command to ensure the worker is alive and responsive. The worker must reply with `{ status: 'pong' }`. |
 
 ---
 
-## 5. User Experience Flow
+## 4. Detailed Data & Logic Flow
 
-### Registration
+### a. User Registration Flow
 
-1.  **User Input**: The user enters their ID and name into a form.
-2.  **Initiate Capture**: Clicking "Start Registration" validates the input, hides the form, and activates the camera.
-3.  **Guided Capture**: The application provides on-screen guidance and automatically captures 20 valid face frames. Real-time quality checks ensure only suitable frames are kept.
-4.  **User Confirmation**: After capture is complete, a "Submit" button appears. The profile is only saved to IndexedDB when the user clicks this button.
-5.  **Completion & Navigation**: Upon successful submission, the user is redirected to the main page. A "Cancel" button is available throughout the process to discard the registration.
+1.  **Page Load (`index.html`)**: The main page immediately calls `initFaceApi()`, which starts the Service/Web Worker and sends the `init` command to begin pre-warming the ML models.
+2.  **User Input (`face_register.html`)**: The user provides their ID and Name.
+3.  **Start Capture**: The UI validates the input and starts the camera. For each video frame, it creates an `ImageBitmap` and sends it to the worker via a `{ cmd: 'detect', ... }` message.
+4.  **Worker Processing**: The worker receives the image, runs the full `face-api.js` pipeline (`detectSingleFace`, `withFaceLandmarks`, `withFaceDescriptor`), and returns the resulting 128-point `Float32Array` descriptor to the UI thread.
+5.  **Descriptor Aggregation**: The UI collects 20 valid descriptors.
+6.  **Mean Descriptor Calculation**: Upon collecting 20 descriptors, the UI computes a "mean descriptor" by averaging them. This mean descriptor is more robust for matching than any single capture.
+7.  **User Submission**: The user clicks "Submit." The UI creates a user profile object containing the ID, name, and all 21 descriptors (20 raw + 1 mean).
+8.  **Database Storage**: The profile object is saved to the `users` object store in IndexedDB.
 
-### Verification
+### b. User Verification Flow
 
-1.  Loads all user profiles from IndexedDB and displays their names and IDs.
-2.  The user starts the camera, which displays a live video feed with overlay graphics.
-3.  Faces detected in the video are compared against all stored descriptors in real-time.
-4.  The on-screen overlay indicates the result: a **green** box for a match (displaying the user's name) or a **red** box for no match.
-5.  Upon completion or cancellation, the user is redirected to the main page.
-
----
-
-## 6. Implemented Features
-
--   **Profile Management**: A dedicated page (`profile_management.html`) allows users to view, edit (rename), and delete their profiles from IndexedDB.
--   **Robust Worker Health Check**: The application uses a `PING`/`PONG` mechanism to check the health of the background worker when the tab becomes visible, automatically re-initializing the Face API if the worker has been terminated by the browser.
--   **Structured Logging**: A logging utility with multiple levels (`info`, `warn`, `error`, `debug`) and a global `DEBUG_MODE` flag is used for cleaner and more effective debugging.
+1.  **Load Profiles (`face_verify.html`)**: The application fetches all user profiles from the `users` object store in IndexedDB. The descriptors for all users are held in memory.
+2.  **Start Camera**: The camera is activated. For each video frame, an `ImageBitmap` is sent to the worker for processing, just like in registration.
+3.  **Real-time Matching**:
+    -   The worker computes the descriptor for the face in the current video frame.
+    -   The UI thread receives this new descriptor and compares it against the stored descriptors of all registered users using `faceapi.FaceMatcher`.
+    -   The `FaceMatcher` calculates the Euclidean distance between the live descriptor and the stored mean descriptors. If the distance is below a certain threshold (e.g., 0.4), it's considered a match.
+4.  **UI Feedback**: The video overlay is updated in real-time to show a green box (match) with the user's name or a red box (no match).
 
 ---
 
-## 7. Known Issues & Edge Cases
+## 5. Operational Details
 
--   **iOS Worker Unreliability**: iOS may unpredictably terminate or block Service Workers. The Web Worker fallback mitigates this, but it remains a platform constraint.
--   **Storage Limitations**: IndexedDB quotas can be low or non-existent in incognito/private browsing modes.
--   **Data Loss**: If the user clears their browser's local storage, all registered profiles will be permanently lost.
--   **(Fixed)** Worker initialization could hang if the Service Worker failed silently. This was resolved with a more robust `try...catch` block and a reliable fallback to the Web Worker.
--   **(Fixed)** The worker health check could fail due to a timeout. This was resolved by implementing a direct `PING`/`PONG` messaging system between the main thread and the worker.
-
----
-
-## 8. Future Enhancements
-
--   Implement a more user-friendly error UI for common browser and camera issues.
--   Add support for different `face-api.js` models to allow users to choose between performance and accuracy.
--   Integrate liveness detection (e.g., blink or head turn checks) to prevent spoofing.
--   Refactor all helper scripts into modern ES Modules for better code organization.
--   Implement multi-user/multi-session handling for shared devices.
--   Add a data export/import feature for profile migration and backup.
-
----
-
-## 9. Related References
-
--   [face-api.js GitHub Repository](https://github.com/justadudewhohacks/face-api.js)
--   [MDN: IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API/Using_IndexedDB)
--   [MDN: Service Worker API](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API)
--   [MDN: ResizeObserver API](https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver)
-
----
-
-## 10. Open Questions / TODO
-
--   Should the face descriptor size be standardized across all models?
--   What is the best policy for local data expiry or deletion on shared devices?
--   What is the accessibility and UI plan for visually impaired users?
-
----
-# END
+-   **Worker Health Check**: A `PING`/`PONG` mechanism is used to verify that the background worker is still active, especially when the browser tab regains focus. If no `PONG` is received within a timeout period, the worker is considered terminated and is re-initialized.
+-   **Structured Logging**: A global `DEBUG_MODE` flag controls a simple logging utility to provide detailed console output for easier debugging.
+-   **Known Issues & Future Work**: (This section will be retained as is).

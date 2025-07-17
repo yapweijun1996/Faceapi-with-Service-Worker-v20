@@ -86,6 +86,7 @@ var flatRegisteredDescriptors = [];
 var flatRegisteredUserMeta = [];
 var lastLoadedVerificationJson = '';
 var verificationResults = [];
+var healthCheckResolver = null;
 // Flag to allow multiple face detection ("y" = allow multiple, else single)
 var multiple_face_detection_yn = "y";
 
@@ -521,11 +522,6 @@ function captureAndSaveVerifiedUserImage(imageData, metadata) {
 	let yPos = canvas.height - 5;
 	const lineHeight = 14;
 
-	if (metadata.gps) {
-		const gpsText = `GPS: ${metadata.gps.latitude.toFixed(4)}, ${metadata.gps.longitude.toFixed(4)}`;
-		ctx.fillText(gpsText, 5, yPos);
-		yPos -= lineHeight;
-	}
 	if (metadata.timeZone) {
 		const tzText = `TimeZone: ${metadata.timeZone} (UTC${metadata.timeZoneOffset})`;
 		ctx.fillText(tzText, 5, yPos);
@@ -549,33 +545,7 @@ function captureAndSaveVerifiedUserImage(imageData, metadata) {
 	return canvas.toDataURL('image/jpeg', 0.5);
 }
 
-async function getGpsCoordinates() {
-	return new Promise((resolve) => {
-		const askForPermission = () => {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					resolve({
-						latitude: position.coords.latitude,
-						longitude: position.coords.longitude,
-					});
-				},
-				(error) => {
-					if (error.code === error.PERMISSION_DENIED) {
-						alert("GPS permission is required for verification. Please allow access to continue.");
-						setTimeout(askForPermission, 1000); // Ask again after a short delay
-					} else {
-						console.error("Error getting GPS location:", error);
-						resolve(null); // Resolve with null if there's another error
-					}
-				}
-			);
-		};
-		askForPermission();
-	});
-}
-
 async function getDeviceMetadata() {
-	const gps = await getGpsCoordinates();
 	const now = new Date();
 	const utcTime = now.toUTCString();
 	const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -590,7 +560,7 @@ async function getDeviceMetadata() {
 	const deviceName = result.device.vendor ? `${result.device.vendor} ${result.device.type || ''}`.trim() : 'Unknown';
 	const deviceModel = result.os.name ? `${result.os.name} ${result.os.version || ''}`.trim() : 'Unknown';
 
-	return { gps, utcTime, timeZone, timeZoneOffset, deviceName, deviceModel, deviceUserAgent: userAgent };
+	return { utcTime, timeZone, timeZoneOffset, deviceName, deviceModel, deviceUserAgent: userAgent };
 }
 
 function isConsistentWithCurrentUser(descriptor) {
@@ -831,7 +801,6 @@ async function load_face_descriptor_json(warmupFaceDescriptorJson, merge = false
 			utcTime: null,
 			timeZone: null,
 			timeZoneOffset: null,
-			gps: null,
 			device: null,
 			deviceName: null,
 			deviceModel: null,
@@ -1331,7 +1300,14 @@ async function faceapi_verify(descriptor, imageData){
 				}
 				verificationResults = verificationResults.map(r => {
 					if (r.id === uid) {
-						return { ...r, verified: true, capturedImage, ...metadata };
+						return { ...r, verified: true, capturedImage, 
+							utcTime: metadata.utcTime,
+							timeZone: metadata.timeZone,
+							timeZoneOffset: metadata.timeZoneOffset,
+							deviceName: metadata.deviceName,
+							deviceModel: metadata.deviceModel,
+							deviceUserAgent: metadata.deviceUserAgent
+						};
 					}
 					return r;
 				});
@@ -1367,6 +1343,14 @@ function handleWorkerMessage(event) {
             faceapi_warmup();
             break;
         case 'DETECTION_RESULT':
+            if (!event.data.data || !event.data.data.detections) {
+                log.warn('[Worker] Received DETECTION_RESULT without detections data. Skipping frame.');
+                isDetectingFrame = false;
+                if (typeof videoDetectionStep === 'function') {
+                    requestAnimationFrame(videoDetectionStep);
+                }
+                break;
+            }
             const dets = event.data.data.detections[0];
             const imageDataForFrame = event.data.data.detections[1] && event.data.data.detections[1][0];
             lastFaceImageData = imageDataForFrame;
@@ -1459,7 +1443,21 @@ function handleWorkerMessage(event) {
 }
 
 async function initWorkerAddEventListener() {
-    navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
+    const messageHandler = (event) => {
+        // Don't handle PONG messages here, they are for the health check promise
+        if (event.data.type === 'PONG') {
+            if (healthCheckResolver) {
+                healthCheckResolver.resolve("ok");
+                healthCheckResolver = null;
+            }
+            return;
+        }
+        handleWorkerMessage(event);
+    };
+
+    // Ensure we don't add duplicate listeners
+    navigator.serviceWorker.removeEventListener('message', messageHandler);
+    navigator.serviceWorker.addEventListener('message', messageHandler);
 }
 
 async function workerRegistration() {
@@ -1641,31 +1639,39 @@ async function checkWorkerHealth() {
         return Promise.reject("No worker");
     }
 
+    // Prevent overlapping health checks
+    if (healthCheckResolver) {
+        log.warn("Health check already in progress.");
+        return Promise.reject("in-progress");
+    }
+
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
+            healthCheckResolver = null; // Clean up resolver on timeout
             reject("timeout");
         }, 2000);
 
-        const healthCheckHandler = (event) => {
-            if (event.data.type === 'PONG') {
+        // Store the resolver functions to be called by the main message handler
+        healthCheckResolver = {
+            resolve: (value) => {
                 clearTimeout(timeout);
-                // Use a temporary handler that removes itself
-                navigator.serviceWorker.removeEventListener('message', healthCheckHandler);
-                if (worker && typeof worker.removeEventListener === 'function') {
-                    worker.removeEventListener('message', healthCheckHandler);
-                }
-                resolve("ok");
+                resolve(value);
+            },
+            reject: (reason) => {
+                clearTimeout(timeout);
+                reject(reason);
             }
         };
 
+        // Send the PING
         if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.addEventListener('message', healthCheckHandler);
             navigator.serviceWorker.controller.postMessage({ type: 'PING' });
         } else if (worker && typeof worker.postMessage === 'function') {
-            worker.addEventListener('message', healthCheckHandler);
             worker.postMessage({ type: 'PING' });
         } else {
+            // If we can't send a ping, fail immediately
             clearTimeout(timeout);
+            healthCheckResolver = null;
             reject("No worker to ping");
         }
     });
@@ -1678,6 +1684,10 @@ document.addEventListener('visibilitychange', async () => {
             await checkWorkerHealth();
             log.info("Worker is healthy.");
         } catch (error) {
+            if (error === 'in-progress') {
+                log.info("Health check skipped, one is already running.");
+                return;
+            }
             log.warn(`Worker health check failed (${error}). Re-initializing Face API...`);
             isWorkerReady = false;
             isFaceApiReady = false;
@@ -1783,6 +1793,7 @@ document.addEventListener("DOMContentLoaded", async function(event) {
             document.getElementById('registrationForm').style.display = 'none';
             document.getElementById('captureProgress').style.display = 'block';
             document.querySelector('.face-detection-container').style.display = 'flex';
+            document.getElementById('progressContainer').classList.remove('expanded');
             
             // Start the camera and detection
             camera_start();
