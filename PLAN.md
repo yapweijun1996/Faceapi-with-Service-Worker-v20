@@ -118,4 +118,11 @@ Based on user feedback, the following issues have been identified and will be ad
     *   **Problem**: The application hangs after logging "Attempting to initialize Service Worker..." because the worker script fails silently.
     *   **Solution**: The Service Worker script was patched to use `self.clients.matchAll()` for broadcasting messages, as `event.source` was `null` during the initial load, causing a fatal error. This ensures reliable communication and prevents the worker from hanging.
 
+5.  **Improved User Experience for Model Loading**:
+    *   **Problem**: The user is blocked from interacting with the page while the face models are loading.
+    *   **Solution**: Implement a non-blocking loading indicator. The user will be able to access the page immediately, and a modal will be displayed to indicate that the models are loading in the background. The modal will be hidden once the models are ready.
+    *   **Implementation**:
+        *   Add a loading modal to `face_register.html`.
+        *   Modify `faceapi_warmup.js` to show the modal on page load and hide it after the Face API is ready.
+
 This plan provides a clear path to building a high-performance, robust, and user-friendly face recognition application.

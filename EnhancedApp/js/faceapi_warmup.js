@@ -39,6 +39,7 @@ let vle_facebox_yn = 'y'; // y / n
 
 
 let isWorkerReady = false;
+let isWarmingUp = false;
 let isFaceApiReady = false;
 let faceApiReadyPromise;
 let resolveFaceApiReady;
@@ -1363,18 +1364,27 @@ async function load_model() {
  * faceApiReadyPromise.
  */
 async function faceapi_warmup() {
+    if (isWarmingUp || isFaceApiReady) {
+        return;
+    }
+    isWarmingUp = true;
     updateModelStatus('Warming up: Verifying models with static image...');
 
     // We need to wait for the first successful detection using a static image.
     // This confirms the model is functional without requiring immediate camera access.
     const warmupDetectionPromise = new Promise((resolve, reject) => {
         const originalHandler = handleWorkerMessage;
+        let warmupTimeout;
 
-        // Create a timeout for the warmup process
-        const warmupTimeout = setTimeout(() => {
+        const cleanup = () => {
+            clearTimeout(warmupTimeout);
+            handleWorkerMessage = originalHandler;
+        };
+
+        warmupTimeout = setTimeout(() => {
             console.error('Warmup timed out. Worker did not respond.');
             updateModelStatus('Warmup failed. Please reload.', true);
-            handleWorkerMessage = originalHandler; // Restore handler
+            cleanup();
             reject(new Error('Warmup timed out'));
         }, 10000); // 10-second timeout
 
@@ -1382,8 +1392,7 @@ async function faceapi_warmup() {
             // We still want the original handler to process other messages
             originalHandler(event);
             if (event.data.type === 'WARMUP_RESULT') {
-                clearTimeout(warmupTimeout); // Clear the timeout on success
-                handleWorkerMessage = originalHandler; // Restore the original handler
+                cleanup();
                 resolve();
             }
         };
@@ -1395,6 +1404,7 @@ async function faceapi_warmup() {
     } else {
         console.error("Worker not available for warmup.");
         updateModelStatus('Initialization error.', true);
+        isWarmingUp = false; // Reset flag on error
         return;
     }
 
@@ -1409,6 +1419,8 @@ async function faceapi_warmup() {
     } catch (error) {
         console.error('Face API warmup failed:', error);
         // The status is already updated by the timeout handler
+    } finally {
+        isWarmingUp = false;
     }
 }
 
